@@ -183,8 +183,8 @@
 #define EDS_ERR_UNKNOWN_COMMAND                             0x0000A001
 #define EDS_ERR_OPERATION_REFUSED                           0x0000A005
 #define EDS_ERR_LENS_COVER_CLOSE                            0x0000A006
-#define EDS_ERR_LOW_BATTERY									0x0000A101
-#define EDS_ERR_OBJECT_NOTREADY								0x0000A102
+#define EDS_ERR_LOW_BATTERY                                    0x0000A101
+#define EDS_ERR_OBJECT_NOTREADY                                0x0000A102
 
 
 
@@ -206,3 +206,4 @@
 
 
 #endif /* _EDS_ERRORS_H_ */
+

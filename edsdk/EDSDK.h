@@ -7,7 +7,7 @@
 *                                                                             *
 *******************************************************************************
 *                                                                             *
-*   Written and developed by Canon Inc.										  *
+*   Written and developed by Canon Inc.                                          *
 *   Copyright Canon Inc. 2006-2007 All Rights Reserved                        *
 *                                                                             *
 *******************************************************************************
@@ -1196,8 +1196,8 @@ EdsError EDSAPI EdsReflectImageProperty(    EdsImageRef      inImageRef );
 //  Returns:    Any of the sdk errors.
 -----------------------------------------------------------------------------*/
 EdsError  EdsCreateEvfImageRef ( 
-					EdsStreamRef  inStreamRef,
-					EdsEvfImageRef  *outEvfImageRef ) ;
+                    EdsStreamRef  inStreamRef,
+                    EdsEvfImageRef  *outEvfImageRef ) ;
 
 
 
@@ -1205,14 +1205,14 @@ EdsError  EdsCreateEvfImageRef (
 //
 //  Function:   EdsDownloadEvfImage         
 //  Description:
-//		Downloads the live view image data set for a camera currently in live view mode.
-//		Live view can be started by using the property ID:kEdsPropertyID_Evf_OutputDevice and
-//		data:EdsOutputDevice_PC to call EdsSetPropertyData.
-//		In addition to image data, information such as zoom, focus position, and histogram data
-//		is included in the image data set. Image data is saved in a stream maintained by EdsEvfImageRef.
-//		EdsGetPropertyData can be used to get information such as the zoom, focus position, etc.
-//		Although the information of the zoom and focus position can be obtained from EdsEvfImageRef,
-//		settings are applied to EdsCameraRef.
+//        Downloads the live view image data set for a camera currently in live view mode.
+//        Live view can be started by using the property ID:kEdsPropertyID_Evf_OutputDevice and
+//        data:EdsOutputDevice_PC to call EdsSetPropertyData.
+//        In addition to image data, information such as zoom, focus position, and histogram data
+//        is included in the image data set. Image data is saved in a stream maintained by EdsEvfImageRef.
+//        EdsGetPropertyData can be used to get information such as the zoom, focus position, etc.
+//        Although the information of the zoom and focus position can be obtained from EdsEvfImageRef,
+//        settings are applied to EdsCameraRef.
 //
 //  Parameters:
 //      In:     inCameraRef - The Camera reference.
@@ -1221,10 +1221,10 @@ EdsError  EdsCreateEvfImageRef (
 //  Returns:    Any of the sdk errors.
 -----------------------------------------------------------------------------*/
 EdsError EdsDownloadEvfImage ( EdsCameraRef  inCameraRef,
-				EdsEvfImageRef  inEvfImageRef ) ;
+                EdsEvfImageRef  inEvfImageRef ) ;
 
-	
-	
+    
+    
 /******************************************************************************
 *******************************************************************************
 //
@@ -1365,3 +1365,4 @@ EdsError EDSAPI EdsGetEvent();
 
 
 #endif /* _EDSDK_H_ */
+

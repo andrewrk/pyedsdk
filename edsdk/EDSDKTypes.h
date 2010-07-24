@@ -184,11 +184,11 @@ typedef  EdsUInt32  EdsPropertyID;
 #define kEdsPropID_SaveTo                 0x0000000b
 #define kEdsPropID_CurrentStorage         0x0000000c
 #define kEdsPropID_CurrentFolder          0x0000000d
-#define kEdsPropID_MyMenu		          0x0000000e
+#define kEdsPropID_MyMenu                  0x0000000e
 
-#define kEdsPropID_BatteryQuality         0x00000010	
+#define kEdsPropID_BatteryQuality         0x00000010    
 
-#define kEdsPropID_HDDirectoryStructure   0x00000020	
+#define kEdsPropID_HDDirectoryStructure   0x00000020    
 
 
 /*----------------------------------
@@ -216,7 +216,7 @@ typedef  EdsUInt32  EdsPropertyID;
 #define kEdsPropID_ColorMatrix            0x00000113
 #define kEdsPropID_PictureStyle           0x00000114
 #define kEdsPropID_PictureStyleDesc       0x00000115
-#define kEdsPropID_ETTL2Mode			  0x00000117
+#define kEdsPropID_ETTL2Mode              0x00000117
 #define kEdsPropID_PictureStyleCaption    0x00000200
 
 /*----------------------------------
@@ -230,18 +230,18 @@ typedef  EdsUInt32  EdsPropertyID;
 /*----------------------------------
  Image GPS Properties
 ----------------------------------*/
-#define kEdsPropID_GPSVersionID			  0x00000800 	
-#define	kEdsPropID_GPSLatitudeRef		  0x00000801 		
-#define	kEdsPropID_GPSLatitude			  0x00000802 	
-#define	kEdsPropID_GPSLongitudeRef		  0x00000803 	
-#define	kEdsPropID_GPSLongitude			  0x00000804 		
-#define	kEdsPropID_GPSAltitudeRef		  0x00000805 		
-#define	kEdsPropID_GPSAltitude			  0x00000806 		
-#define	kEdsPropID_GPSTimeStamp			  0x00000807 		
-#define	kEdsPropID_GPSSatellites		  0x00000808 		
-#define	kEdsPropID_GPSStatus			  0x00000809
-#define	kEdsPropID_GPSMapDatum			  0x00000812 		
-#define	kEdsPropID_GPSDateStamp			  0x0000081D 		
+#define kEdsPropID_GPSVersionID              0x00000800     
+#define    kEdsPropID_GPSLatitudeRef          0x00000801         
+#define    kEdsPropID_GPSLatitude              0x00000802     
+#define    kEdsPropID_GPSLongitudeRef          0x00000803     
+#define    kEdsPropID_GPSLongitude              0x00000804         
+#define    kEdsPropID_GPSAltitudeRef          0x00000805         
+#define    kEdsPropID_GPSAltitude              0x00000806         
+#define    kEdsPropID_GPSTimeStamp              0x00000807         
+#define    kEdsPropID_GPSSatellites          0x00000808         
+#define    kEdsPropID_GPSStatus              0x00000809
+#define    kEdsPropID_GPSMapDatum              0x00000812         
+#define    kEdsPropID_GPSDateStamp              0x0000081D         
 
 
 /*----------------------------------
@@ -276,9 +276,9 @@ typedef  EdsUInt32  EdsPropertyID;
 #define kEdsPropID_FlashMode              0x00000414
 #define kEdsPropID_LensStatus             0x00000416
 
-#define kEdsPropID_Artist	              0x00000418
-#define kEdsPropID_Copyright	          0x00000419
-#define kEdsPropID_DepthOfField	          0x0000041b
+#define kEdsPropID_Artist                  0x00000418
+#define kEdsPropID_Copyright              0x00000419
+#define kEdsPropID_DepthOfField              0x0000041b
 #define kEdsPropID_EFCompensation         0x0000041e
 
 
@@ -309,27 +309,27 @@ typedef  EdsUInt32  EdsCameraCommand;
 ----------------------------------*/
 #define kEdsCameraCommand_TakePicture                     0x00000000
 #define kEdsCameraCommand_ExtendShutDownTimer             0x00000001
-#define kEdsCameraCommand_BulbStart						  0x00000002 
-#define kEdsCameraCommand_BulbEnd						  0x00000003 
+#define kEdsCameraCommand_BulbStart                          0x00000002 
+#define kEdsCameraCommand_BulbEnd                          0x00000003 
 #define kEdsCameraCommand_DoEvfAf                         0x00000102
 #define kEdsCameraCommand_DriveLensEvf                    0x00000103
 #define kEdsCameraCommand_DoClickWBEvf                    0x00000104
 
-#define kEdsCameraCommand_PressShutterButton			  0x00000004
+#define kEdsCameraCommand_PressShutterButton              0x00000004
 
 typedef enum
 {
-	kEdsCameraCommand_EvfAf_OFF		= 0,
-	kEdsCameraCommand_EvfAf_ON		= 1,
+    kEdsCameraCommand_EvfAf_OFF        = 0,
+    kEdsCameraCommand_EvfAf_ON        = 1,
 } EdsEvfAf ;
 
 typedef enum
 {
-	kEdsCameraCommand_ShutterButton_OFF					= 0x00000000,
-	kEdsCameraCommand_ShutterButton_Halfway				= 0x00000001,
-	kEdsCameraCommand_ShutterButton_Completely			= 0x00000003,
-	kEdsCameraCommand_ShutterButton_Halfway_NonAF		= 0x00010001,
-	kEdsCameraCommand_ShutterButton_Completely_NonAF	= 0x00010003,
+    kEdsCameraCommand_ShutterButton_OFF                    = 0x00000000,
+    kEdsCameraCommand_ShutterButton_Halfway                = 0x00000001,
+    kEdsCameraCommand_ShutterButton_Completely            = 0x00000003,
+    kEdsCameraCommand_ShutterButton_Halfway_NonAF        = 0x00010001,
+    kEdsCameraCommand_ShutterButton_Completely_NonAF    = 0x00010003,
 } EdsShutterButton ;
 
 
@@ -521,22 +521,22 @@ typedef  EdsUInt32  EdsStateEvent;
 #define kEdsStateEvent_InternalError                0x00000306
 
 
-#define kEdsStateEvent_AfResult                     0x00000309	
+#define kEdsStateEvent_AfResult                     0x00000309    
 
 
-#define kEdsStateEvent_BulbExposureTime             0x00000310	
+#define kEdsStateEvent_BulbExposureTime             0x00000310    
 
 /*-----------------------------------------------------------------------------
  Drive Lens
 -----------------------------------------------------------------------------*/
 typedef enum
 {
-	kEdsEvfDriveLens_Near1	= 0x00000001,
-	kEdsEvfDriveLens_Near2	= 0x00000002,
-	kEdsEvfDriveLens_Near3	= 0x00000003,
-	kEdsEvfDriveLens_Far1	= 0x00008001,
-	kEdsEvfDriveLens_Far2	= 0x00008002,
-	kEdsEvfDriveLens_Far3	= 0x00008003,
+    kEdsEvfDriveLens_Near1    = 0x00000001,
+    kEdsEvfDriveLens_Near2    = 0x00000002,
+    kEdsEvfDriveLens_Near3    = 0x00000003,
+    kEdsEvfDriveLens_Far1    = 0x00008001,
+    kEdsEvfDriveLens_Far2    = 0x00008002,
+    kEdsEvfDriveLens_Far3    = 0x00008003,
 } EdsEvfDriveLens ;
 
 
@@ -545,8 +545,8 @@ typedef enum
  Depth of Field Preview
 -----------------------------------------------------------------------------*/
 typedef enum  {
-	kEdsEvfDepthOfFieldPreview_OFF	= 0x00000000,
-	kEdsEvfDepthOfFieldPreview_ON 	= 0x00000001,
+    kEdsEvfDepthOfFieldPreview_OFF    = 0x00000000,
+    kEdsEvfDepthOfFieldPreview_ON     = 0x00000001,
 } EdsEvfDepthOfFieldPreview  ;
 
 
@@ -739,10 +739,10 @@ typedef enum
     kEdsWhiteBalance_PCSet1       = 10,
     kEdsWhiteBalance_PCSet2       = 11,
     kEdsWhiteBalance_PCSet3       = 12,
-	kEdsWhiteBalance_WhitePaper2  = 15, 
-	kEdsWhiteBalance_WhitePaper3  = 16, 
-	kEdsWhiteBalance_WhitePaper4  = 18,
-	kEdsWhiteBalance_WhitePaper5  = 19,
+    kEdsWhiteBalance_WhitePaper2  = 15, 
+    kEdsWhiteBalance_WhitePaper3  = 16, 
+    kEdsWhiteBalance_WhitePaper4  = 18,
+    kEdsWhiteBalance_WhitePaper5  = 19,
     kEdsWhiteBalance_PCSet4       = 20,
     kEdsWhiteBalance_PCSet5       = 21,
     kEdsWhiteBalance_Click        = -1,
@@ -866,8 +866,8 @@ typedef enum
     kEdsAEMode_Closeup          = 14,
     kEdsAEMode_FlashOff         = 15,
     kEdsAEMode_CreativeAuto     = 19,
-	kEdsAEMode_Movie			= 20,
-	kEdsAEMode_PhotoInMovie		= 21,
+    kEdsAEMode_Movie            = 20,
+    kEdsAEMode_PhotoInMovie        = 21,
     kEdsAEMode_Unknown          = 0xffffffff,
 
 } EdsAEMode;
@@ -890,8 +890,8 @@ typedef enum
 -----------------------------------------------------------------------------*/
 typedef enum 
 {
-	kEdsEvfOutputDevice_TFT			= 1,
-	kEdsEvfOutputDevice_PC			= 2,
+    kEdsEvfOutputDevice_TFT            = 1,
+    kEdsEvfOutputDevice_PC            = 2,
 } EdsEvfOutputDevice;
 
 /*-----------------------------------------------------------------------------
@@ -899,9 +899,9 @@ typedef enum
 -----------------------------------------------------------------------------*/
 typedef enum 
 {
-	kEdsEvfZoom_Fit			= 1,
-	kEdsEvfZoom_x5			= 5,
-	kEdsEvfZoom_x10			= 10,
+    kEdsEvfZoom_Fit            = 1,
+    kEdsEvfZoom_x5            = 5,
+    kEdsEvfZoom_x10            = 10,
 } EdsEvfZoom;
 
 /*-----------------------------------------------------------------------------
@@ -909,9 +909,9 @@ typedef enum
 -----------------------------------------------------------------------------*/
 typedef enum 
 {
-	Evf_AFMode_Quick = 0,
-	Evf_AFMode_Live = 1,
-	Evf_AFMode_LiveFace = 2,
+    Evf_AFMode_Quick = 0,
+    Evf_AFMode_Live = 1,
+    Evf_AFMode_LiveFace = 2,
 } EdsEvfAFMode;
 
 /*-----------------------------------------------------------------------------
@@ -919,13 +919,13 @@ typedef enum
 -----------------------------------------------------------------------------*/
 typedef enum
 {
-	kEdsStroboModeInternal			= 0,
-	kEdsStroboModeExternalETTL		= 1,
-	kEdsStroboModeExternalATTL		= 2,
-	kEdsStroboModeExternalTTL		= 3,
-	kEdsStroboModeExternalAuto		= 4,
-	kEdsStroboModeExternalManual	= 5,
-	kEdsStroboModeManual			= 6,
+    kEdsStroboModeInternal            = 0,
+    kEdsStroboModeExternalETTL        = 1,
+    kEdsStroboModeExternalATTL        = 2,
+    kEdsStroboModeExternalTTL        = 3,
+    kEdsStroboModeExternalAuto        = 4,
+    kEdsStroboModeExternalManual    = 5,
+    kEdsStroboModeManual            = 6,
 }EdsStroboMode;
 
 /*-----------------------------------------------------------------------------
@@ -933,8 +933,8 @@ typedef enum
 -----------------------------------------------------------------------------*/
 typedef enum
 {
-	kEdsETTL2ModeEvaluative		= 0,
-	kEdsETTL2ModeAverage		= 1,
+    kEdsETTL2ModeEvaluative        = 0,
+    kEdsETTL2ModeAverage        = 1,
 }EdsETTL2Mode;
 
 /******************************************************************************
@@ -1002,7 +1002,7 @@ typedef struct tagEdsDeviceInfo
     EdsChar     szPortName[ EDS_MAX_NAME ];
     EdsChar     szDeviceDescription[ EDS_MAX_NAME ];
     EdsUInt32   deviceSubType;
-	EdsUInt32	reserved;
+    EdsUInt32    reserved;
 } EdsDeviceInfo;
 
 /*-----------------------------------------------------------------------------
@@ -1063,7 +1063,7 @@ typedef struct tagEdsSaveImageSetting
 typedef struct tagEdsPropertyDesc
 {
     EdsInt32        form;   
-    EdsInt32		access; 
+    EdsInt32        access; 
     EdsInt32        numElements;
     EdsInt32        propDesc[128];
 
@@ -1089,7 +1089,7 @@ typedef struct tagEdsPictureStyleDesc
 typedef struct tagEdsFrameDesc
 {
     EdsUInt32       valid;
-	EdsUInt32       selected;
+    EdsUInt32       selected;
     EdsUInt32       justFocus;
     EdsRect         rect;
     EdsUInt32       reserved;
@@ -1101,7 +1101,7 @@ typedef struct tagEdsFocusInfo
     EdsRect         imageRect;
     EdsUInt32       pointNumber;
     EdsFocusPoint   focusPoint[128];
-	EdsUInt32       executeMode;
+    EdsUInt32       executeMode;
 
 } EdsFocusInfo;
 
@@ -1188,3 +1188,4 @@ typedef struct
 
 
 #endif /* _EDS_TYPES_H_ */
+

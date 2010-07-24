@@ -1,7 +1,12 @@
 #include "Camera.h"
-#include <cassert>
 
-Camera * Camera::s_instance = NULL;
+#include "Filesystem.h"
+using namespace Filesystem;
+
+#include <cstdio>
+#include <iostream>
+#include <cassert>
+using namespace std;
 
 const string Camera::c_cameraName_5D = "Canon EOS 5D Mark II";
 const string Camera::c_cameraName_40D = "Canon EOS 40D";
@@ -15,15 +20,15 @@ const int Camera::c_sleepAmount = 50;
 
 const bool Camera::c_forceJpeg = false;
 
-Camera * Camera::instance()
-{
-    if (! s_instance)
-        s_instance = new Camera();
-    return s_instance;
-}
+bool Camera::s_initialized = false;
 
-Camera::Camera()
+void Camera::initialize()
 {
+    if (s_initialized)
+        return;
+
+    s_initialized = true;
+
     // camera-specific information
     // 40D
     CameraModelData data40D;
@@ -69,37 +74,83 @@ Camera::Camera()
     m_modelData[c_cameraName_5D] = data5D;
     m_modelData[c_cameraName_7D] = data7D;
 
-    resetState();
-    checkError(EdsInitializeSDK());
+    EdsInitializeSDK();
+}
 
-    int limit = 20;
-    int count = 0;
-    while(! establishSession() && count < limit) {
-        ++count;
-    }
-    if (count >= limit) {
-        cerr << "FATAL: Error establishing a session with the camera." << endl;
-        exit(-1);
-    }
+Camera::Camera(EdsCameraRef cam) :
+    m_cam(cam),
+    m_waitingOnPic(false),
+    m_liveViewOn(false),
+    m_waitingToStartLiveView(false),
+    m_stoppingLiveView(false),
+    m_liveViewStreamPtr(NULL),
+    m_pendingZoomPosition(false),
+    m_zoomRatio(1),
+    m_whiteBalance(kEdsWhiteBalance_Auto),
+    m_pendingZoomRatio(false),
+    m_pendingWhiteBalance(false),
+    m_fastPictures(false),
+    m_fastPicturesInteruptingLiveView(false),
+    m_good(false)
+{
+    // call static initializer
+    initialize();
+
+    // TODO: live view pic box and liveviewthread
+    // TODO: live view frame buffer and live view buffer handle
+    m_liveViewImageSize.width = 0;
+    m_liveViewImageSize.height = 0;
+    m_zoomPosition.x = 0;
+    m_zoomPosition.y = 0;
+    m_pendingZoomPoint.x = 0;
+    m_pendingZoomPoint.y = 0;
+
+    establishSession();
 }
 
 Camera::~Camera()
 {
-    if (! m_haveSession)
-        return;
-
-    stopLiveView(); // stops it only if it's running
-
-    /*
-    flushTransferQueue();
-    releaseSession();
-    EdsTerminateSDK();
-    */
-
-    s_instance = NULL;
+    // release session
+    EdsCloseSession(m_cam);
+    EdsRelease(m_cam);
 }
 
-CameraModelData Camera::cameraSpecificData() const
+Camera * Camera::getFirstCamera()
+{
+    initialize();
+
+    EdsCameraListRef camList = NULL;
+    EdsError err = EDS_ERR_OK;
+
+    err = err || EdsGetCameraList(&camList);
+
+    EdsUInt32 camCount = 0;
+    err = err || EdsGetChildCount(camList, &camCount);
+
+    if (camCount == 0) {
+        cerr << "ERROR: No camera connected." << endl;
+        if (camList)
+            EdsRelease(camList);
+        return NULL;
+    }
+
+    // get the first camera
+    EdsCameraRef camHandle;
+    err = err || EdsGetChildAtIndex(camList, 0, &camHandle);
+
+    Camera * cam = new Camera(camHandle);
+
+    // release the camera list data
+    err = err || EdsRelease(camList);
+
+    if (err) {
+        cerr << "ERROR: Error occurred when getting first camera: " << err << endl;
+    }
+
+    return cam;
+}
+
+Camera::CameraModelData Camera::cameraSpecificData() const
 {
     string myName = name();
 
@@ -110,125 +161,60 @@ CameraModelData Camera::cameraSpecificData() const
     return m_modelData[c_cameraName_40D];
 }
 
-void Camera::resetState()
+void Camera::establishSession()
 {
-    m_waitingOnPic = false;
-    m_liveViewOn = false;
-    m_waitingToStartLiveView = false;
-    // TODO: live view pic box and liveviewthread
-    m_stoppingLiveView = false;
-    // TODO: live view frame buffer and live view buffer handle
-    m_liveViewStreamPtr = NULL;
-    m_liveViewImageSize.width = 0;
-    m_liveViewImageSize.height = 0;
-    m_transferQueue.clear();
-    m_haveSession = false;
-    m_zoomPosition = NULL;
-    m_pendingZoomPoint = NULL;
-    m_zoomRatio = NULL;
-    m_whiteBalance = NULL;
-
-    m_pendingZoomRatio = false;
-    m_pendingZoomPosition = false;
-    m_pendingWhiteBalance = false;
-
-    m_fastPictures = false;
-    m_fastPicturesInteruptingLiveView = false;
-}
-
-bool Camera::establishSession()
-{
-    if (m_haveSession)
-        return;
-
-    EdsCameraListRef camList;
-    int camCount;
-
-    checkError(EdsGetCameraList(camList));
-    checkError(EdsGetChildCount(camList, &camCount));
-
-    if (camCount > 1) {
-        cerr << "FATAL: Too many cameras connected." << endl;
-        exit(-1);
-    } else if (camCount == 0) {
-        cerr << "FATAL: No camera connected." << endl;
-        exit(-1);
-    }
-
-    // get the only camera
-    checkError(EdsGetChildAtIndex(camList, 0, m_cam));
-
-    // release the camera list data
-    checkError(EdsRelease(camList));
+    EdsError err = EDS_ERR_OK;
 
     // open a session
-    checkError(EdsOpenSession(m_cam));
+    err = err || EdsOpenSession(m_cam);
 
     // handlers
-    m_stateEventHandler = &staticStateEventHandler;
-    m_objectEventHandler = &staticObjectEventHandler;
-    m_propertyEventHandler = &staticPropertyEventHandler;
-
-    checkError(EdsSetCameraStateEventHandler(m_cam, kEdsStateEvent_All, m_stateEventHandler, NULL));
-    checkError(EdsSetObjectEventHandler(m_cam, kEdsObjectEvent_All, m_objectEventHandler, NULL));
-    checkError(EdsSetCameraStateEventHandler(m_cam, kEdsPropertyEvent_All, m_propertyEventHandler, NULL));
+    err = err || EdsSetCameraStateEventHandler(m_cam, kEdsStateEvent_All, &staticStateEventHandler, this);
+    err = err || EdsSetObjectEventHandler(m_cam, kEdsObjectEvent_All, &staticObjectEventHandler, this);
+    err = err || EdsSetPropertyEventHandler(m_cam, kEdsPropertyEvent_All, &staticPropertyEventHandler, this);
 
     // set default options
     // save to computer, not memory card
     EdsUInt32 value = kEdsSaveTo_Host;
-    checkError(EdsSetPropertyData(m_cam, kEdsPropID_SaveTo, 0, sizeof(EdsUInt32), &value));
+    err = err || EdsSetPropertyData(m_cam, kEdsPropID_SaveTo, 0, sizeof(EdsUInt32), &value);
 
     if (c_forceJpeg) {
         // enforce JPEG format
         EdsUInt32 qs;
-        checkError(EdsGetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs));
+        err = err || EdsGetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs);
         // clear the old image type setting and set the new one
-        qs = qs & 0xhff0fffff | (kEdsImageType_Jpeg << 20);
-        checkError(EdsSetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs));
+        qs = qs & 0xff0fffff | (kEdsImageType_Jpeg << 20);
+        err = err || EdsSetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs);
     }
 
-    m_haveSession = true;
-
-    return true;
+    if (err) {
+        cerr << "ERROR: When establishing session: " << err << endl;
+    }
+    m_good = (err == 0);
 }
 
-void Camera::releaseSession()
-{
-    /*
-    assert(m_fastPictures == false);
-    EdsCloseSession(m_cam);
-    EdsRelease(m_cam);
-    m_haveSession = false;
-    */
-}
-
-void Camera::checkError(EdsError err)
-{
-    cerr << "ERROR: " << err << endl;
-}
-
-EdsError Camera::staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
+EdsError EDSCALLBACK Camera::staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
 {
     // transfer from static to member
-    s_instance->objectEventHandler(inEvent, inRef, inContext);
+    ((Camera *) inContext)->objectEventHandler(inEvent, inRef);
     return 0;
 }
 
-EdsError Camera::staticStateEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
+EdsError EDSCALLBACK Camera::staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext)
 {
     // transfer from static to member
-    s_instance->stateEventHandler(inEvent, inRef, inContext);
+    ((Camera *) inContext)->stateEventHandler(inEvent, inEventData);
     return 0;
 }
 
-EdsError Camera::staticPropertyEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
+EdsError EDSCALLBACK Camera::staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext)
 {
     // transfer from static to member
-    s_instance->propertyEventHandler(inEvent, inRef, inContext);
+    ((Camera *) inContext)->propertyEventHandler(inEvent, inPropertyID, inParam);
     return 0;
 }
 
-EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
+EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
 {
     if (inEvent == kEdsObjectEvent_DirItemRequestTransfer) {
         if (m_fastPictures) {
@@ -236,7 +222,7 @@ EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, Ed
             TransferItem transfer;
             transfer.sdkRef = inRef;
             transfer.outFile = m_picOutFolder;
-            m_transferQueue.push_back(transfer);
+            m_transferQueue.push(transfer);
         } else {
             transferOneItem(inRef, m_picOutFolder);
         }
@@ -248,12 +234,12 @@ EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, Ed
     }
 }
 
-EdsError Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext)
+EdsError Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 {
     cerr << "DEBUG: stateEventHandler: event " << inEvent << ", parameter " << inEventData << endl;
 }
 
-EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext)
+EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
         if (m_waitingToStartLiveView) {
@@ -269,52 +255,55 @@ EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID in
     }
 }
 
-string Camera::ensureDoesNotExist(string outfile)
-{
-    // TODO
-    return outfile;
-}
-
 void Camera::transferOneItem(EdsBaseRef inRef, string outFolder)
 {
     // transfer the image in memory to disk
     EdsDirectoryItemInfo dirItemInfo;
     EdsStreamRef outStream;
 
-    checkError(EdsGetDirectoryItemInfo(inRef, dirItemInfo));
+    EdsError err = EDS_ERR_OK;
 
-    string outfile = outFolder + "\\";
-    outfile += dirItemInfo.szFileName;
+    err = err || EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
+
+    if (err) {
+        cerr << "ERROR: unable to transfer an item: " << err << endl;
+        return;
+    }
+
+    string outfile = pathCombine(outFolder, dirItemInfo.szFileName);
 
     // make sure we don't overwrite files
-    outfile = ensureDoesNotExist(outfile);
+    outfile = makeUnique(outfile);
 
     // get a temp file to write to
-    string tmpfile = GET TEMP FILE; // TODO
+    string tmpfile = tmpnam(NULL);
 
     // this creates the outStream that is used by EdsDownload to actually
     // grab and write out the file
-    checkError(EdsCreateFileStream(tmpfile, kEdsFileCreateDisposition_CreateAlways, kEdsAccess_ReadWrite, outStream));
+    err = err || EdsCreateFileStream(tmpfile.c_str(), kEdsFileCreateDisposition_CreateAlways, kEdsAccess_ReadWrite, &outStream);
 
     // do the transfer
-    checkError(EdsDownload(inRef, dirItemInfo.size, outStream));
-    checkError(EdsDownloadComplete(inRef));
+    err = err || EdsDownload(inRef, dirItemInfo.size, outStream);
+    err = err || EdsDownloadComplete(inRef);
 
     // clean up
-    checkError(EdsRelease(outStream));
+    err = err || EdsRelease(outStream);
 
-    FILE MOVE tmpfile -> outfile; // TODO
+    moveFile(tmpfile, outfile);
 }
 
 void Camera::beginFastPictures()
 {
-    checkBusy();
+    assert(! isBusy());
+    if (isBusy()) {
+        cerr << "ERROR: can't begin fast pictures, camera is busy." << endl;   
+        return;
+    }
 
     m_fastPicturesInteruptingLiveView = m_liveViewOn;
     if (m_fastPicturesInteruptingLiveView)
         stopLiveView();
 
-    establishSession();
     m_fastPictures = true;
 }
 
@@ -330,22 +319,21 @@ void Camera::endFastPictures()
 
     m_fastPictures = false;
 
-    releaseSession();
-
     if (m_fastPicturesInteruptingLiveView) {
         m_fastPicturesInteruptingLiveView = false;
         // TODO: start live view
     }
 }
 
-void takeFastPicture(string outFolder)
+void Camera::takeFastPicture(string outFolder)
 {
+    assert(! m_fastPictures);
     if (! m_fastPictures) {
-        cerr << "FATAL: must be in fast picture mode to take a fast picture." << endl;
-        exit(-1);
+        cerr << "ERROR: must be in fast picture mode to take a fast picture." << endl;
+        return;
     }
 
-    checkDirectory(outFolder);
+    ensurePathExists(outFolder);
 
     // set flag indicating we are waiting on a callback call
     m_waitingOnPic = true;
@@ -361,36 +349,36 @@ void takeFastPicture(string outFolder)
     }
 }
 
-void Camera::checkBusy()
+bool Camera::isBusy()
 {
-    if (m_waitingOnPic || m_waitingToStartLiveView) {
-        // bad programmer. should have disabled user controls.
-        cerr << "FATAL: camera is busy." << endl;
-        exit(-1);
-    }
+    return (m_waitingOnPic || m_waitingToStartLiveView);
 }
 
-void Camera::lieToTheCameraAboutHowMuchSpaceWeHaveOnTheComputer()
+void Camera::setComputerCapabilities()
 {
     // tell the camera how much disk space we have left
     EdsCapacity caps;
 
-    caps.reset = True;
+    caps.reset = true;
     caps.bytesPerSector = 512;
     caps.numberOfFreeClusters = 2147483647; // arbitrary large number
-    checkError(EdsSetCapacity(m_cam, caps));
+    EdsError err = EdsSetCapacity(m_cam, caps);
+
+    if (err)
+        cerr << "ERROR: unable to set computer capabilities: " << err << endl;
 }
 
 bool Camera::takePicture(string outFile)
 {
-    lieToTheCameraAboutHowMuchSpaceWeHaveOnTheComputer();
+    setComputerCapabilities();
 
     // take a picture with the camera and save it to outfile
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
     if (err != EDS_ERR_OK) {
         m_waitingOnPic = false;
-        checkError(err);
+        cerr << "ERROR: unable to take picture: " << err << endl;
+        return false;
     }
 
     for (int i = 0; i < c_sleepTimeout / c_sleepAmount; ++i) {
@@ -417,14 +405,16 @@ void Camera::showLiveViewFrame()
 
 void Camera::takeSinglePicture(string outFolder)
 {
+    assert(! isBusy());
+    if (isBusy()) {
+        cerr << "ERROR: can't take picture, camera is busy." << endl;   
+        return;
+    }
+
     bool interuptingLiveView = m_liveViewOn;
     // TODO: picture box code
-    bool haveSession = m_haveSession;
+    ensurePathExists(outFolder);
 
-    checkDirectory(outFolder);
-
-    establishSession();
-    checkBusy();
 
     if (interuptingLiveView)
         stopLiveView();
@@ -441,9 +431,6 @@ void Camera::takeSinglePicture(string outFolder)
         // we never got a callback. throw an error
         if (interuptingLiveView) {
             // TODO: start live view
-        } else {
-            if (! haveSession)
-                releaseSession();
         }
 
         m_waitingOnPic = false;
@@ -490,11 +477,9 @@ void Camera::setZoomRatio(int zoomRatio)
 
 EdsWhiteBalance Camera::whiteBalance() const
 {
-    bool haveSession = m_haveSession;
-    establishSession();
-    checkError(EdsGetPropertyData(m_cam, kEdsPropID_WhiteBalance, 0, sizeof(m_whiteBalance), &m_whiteBalance));
-    if (! haveSession)
-        releaseSession();
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_WhiteBalance, 0, sizeof(m_whiteBalance), (EdsVoid *) &m_whiteBalance);
+    if (err)
+        cerr << "ERROR: Unable to get white balance: " << err << endl;
     return m_whiteBalance;
 }
 void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
@@ -506,7 +491,13 @@ void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
 string Camera::name() const
 {
     EdsDeviceInfo deviceInfo;
-    checkError(EdsGetDeviceInfo(m_cam, deviceInfo));
+    EdsError err = EdsGetDeviceInfo(m_cam, &deviceInfo);
+
+    if (err) {
+        cerr << "ERROR: Unable to get device info: " << err << endl;
+        return string();
+    }
+
     return deviceInfo.szDeviceDescription;
 }
 
