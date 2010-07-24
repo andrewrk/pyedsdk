@@ -1,1 +1,10 @@
 Python library to control cameras via EDSDK
+
+Sample usage:
+
+    import edsdk
+
+    cam = edsdk.getSingleCamera()
+    
+    cam.takeSinglePicture(filename)
+
