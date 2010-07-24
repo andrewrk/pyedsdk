@@ -22,6 +22,8 @@ const bool Camera::c_forceJpeg = false;
 
 bool Camera::s_initialized = false;
 
+map<string, Camera::CameraModelData> Camera::s_modelData;
+
 void Camera::initialize()
 {
     if (s_initialized)
@@ -69,10 +71,9 @@ void Camera::initialize()
     data7D.zoomBoxSize.width = 212;
     data7D.zoomBoxSize.height = 144;
 
-    m_modelData.clear();
-    m_modelData[c_cameraName_40D] = data40D;
-    m_modelData[c_cameraName_5D] = data5D;
-    m_modelData[c_cameraName_7D] = data7D;
+    s_modelData[c_cameraName_40D] = data40D;
+    s_modelData[c_cameraName_5D] = data5D;
+    s_modelData[c_cameraName_7D] = data7D;
 
     EdsInitializeSDK();
 }
@@ -154,11 +155,11 @@ Camera::CameraModelData Camera::cameraSpecificData() const
 {
     string myName = name();
 
-    if (m_modelData.count(myName) > 0)
-        return m_modelData[myName];
+    if (s_modelData.count(myName) > 0)
+        return s_modelData[myName];
 
     // default to 40D
-    return m_modelData[c_cameraName_40D];
+    return s_modelData[c_cameraName_40D];
 }
 
 void Camera::establishSession()

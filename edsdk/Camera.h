@@ -76,7 +76,7 @@ class Camera
             string outFile;
         };
 
-        static map<string, CameraModelData> m_modelData;
+        static map<string, CameraModelData> s_modelData;
 
         EdsCameraRef m_cam;
 
