@@ -10,10 +10,12 @@ using namespace std;
 #include "EDSDKErrors.h"
 #include "EDSDKTypes.h"
 
+
 class Camera
 {
     public: // variables
         typedef void (* liveViewFrameCallback) (char * frame);
+        typedef void (* takePictureCompleteCallback) (string filename);
 
         enum CameraState {
             Ready,
@@ -29,14 +31,20 @@ class Camera
         // name of the camera model
         string name() const;
 
-        void takeSinglePicture(string outFolder);
+        // takes a picture with the camera and puts it in outFile.
+        // returns immediately but the picture won't be finished immediately.
+        void takeSinglePicture(string outFile);
 
         void beginFastPictures();
-        void takeFastPicture(string outFolder);
+        void takeFastPicture(string outFile);
         void endFastPictures();
 
-        // opens up live view and begins calling callback for each frame.
-        void startLiveView(liveViewFrameCallback callback);
+        // if you want to be notified when a picture is finally done, use this:
+        void setPictureCompleteCallback(takePictureCompleteCallback callback);
+
+        // set the function that will be called for each live view frame
+        void setLiveViewCallback(liveViewFrameCallback callback);
+        void startLiveView();
         void stopLiveView();
 
         // size of the frames coming through live view. only valid once
@@ -59,6 +67,37 @@ class Camera
     private: // variables
         static bool s_initialized;
 
+        class LiveView {
+            public:
+            // TODO: Private m_liveViewThread as Thread
+            static const int c_delay;
+            static const int c_frameBufferSize;
+            
+            enum State {
+                // we don't want live view on.
+                Off,
+                // we have requested live view to turn on but it has not complied yet
+                WaitingToStart,
+                // it's on and we're currently streaming.
+                On,
+                // we'd like it to be on, but we are doing something which must
+                // interupt live view, like taking a picture
+                Paused,
+                // we have requested live view to turn off but it has not complied yet
+                WaitingToStop
+            };
+
+            State m_state;
+
+            EdsStreamRef m_streamPtr;
+            EdsSize m_imageSize;
+            // TODO: Private m_liveViewFrameBuffer as Byte()
+            // TODO: Private m_liveViewBufferHandle as GCHandle
+
+            LiveView();
+        };
+        LiveView m_liveView;
+
         static const string c_cameraName_5D;
         static const string c_cameraName_40D;
         static const string c_cameraName_7D;
@@ -80,21 +119,9 @@ class Camera
 
         EdsCameraRef m_cam;
 
-        bool m_waitingOnPic;
-        string m_picOutFolder;
+        // what file to save the next picture as
+        string m_picOutFile;
 
-        // live view
-        static const int c_liveViewDelay;
-        static const int c_liveViewFrameBufferSize;
-        // TODO: Private m_liveViewThread as Thread
-        bool m_liveViewOn;
-        bool m_waitingToStartLiveView;
-        // TODO: Private m_liveViewPicBox as PictureBox
-        bool m_stoppingLiveView;
-        // TODO: Private m_liveViewFrameBuffer as Byte()
-        // TODO: Private m_liveViewBufferHandle as GCHandle
-        EdsStreamRef m_liveViewStreamPtr;
-        EdsSize m_liveViewImageSize;
 
         EdsPoint m_zoomPosition;
         bool m_pendingZoomPosition;
@@ -104,9 +131,6 @@ class Camera
         EdsWhiteBalance m_whiteBalance;
         bool m_pendingWhiteBalance;
         bool m_fastPictures;
-
-        bool m_fastPicturesInteruptingLiveView;
-        // TODO: Private m_fastPicturesLiveViewBox as PictureBox
 
         // how many milliseconds to wait before giving up
         static const int c_sleepTimeout;
@@ -122,6 +146,9 @@ class Camera
         // true if everything is working
         bool m_good;
 
+        takePictureCompleteCallback m_pictureCompleteCallback;
+        liveViewFrameCallback m_liveViewFrameCallback;
+
         // TODO: we left out CoInitializeEx. make sure it still works.
     private: // methods
         static void initialize();
@@ -135,24 +162,27 @@ class Camera
         void establishSession();
 
         static EdsError EDSCALLBACK staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext);
-    static EdsError EDSCALLBACK staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext);
-    static EdsError EDSCALLBACK staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext);
+        static EdsError EDSCALLBACK staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext);
+        static EdsError EDSCALLBACK staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext);
 
-    EdsError objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef);
-    EdsError stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData);
-    EdsError propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam);
+        EdsError objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef);
+        EdsError stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData);
+        EdsError propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam);
 
-    string ensureDoesNotExist(string outfile);
+        string ensureDoesNotExist(string outfile);
 
-    void transferOneItem(EdsBaseRef inRef, string outFolder);
-    bool isBusy();
-    void setComputerCapabilities();
+        void transferOneItem(EdsBaseRef inRef, string outFolder);
+        bool isBusy();
+        void setComputerCapabilities();
 
-    // internal take picture function. returns true upon success
-    bool takePicture(string outFile);
+        // internal take picture function
+        void takePicture();
 
-    void updateLiveView();
-    void showLiveViewFrame();
+        void updateLiveView();
+        void showLiveViewFrame();
+
+        void pauseLiveView();
+        void resumeLiveView();
 
 };
 

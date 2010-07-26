@@ -12,13 +12,13 @@ const string Camera::c_cameraName_5D = "Canon EOS 5D Mark II";
 const string Camera::c_cameraName_40D = "Canon EOS 40D";
 const string Camera::c_cameraName_7D = "Canon EOS 7D";
 
-const int Camera::c_liveViewDelay = 200;
-const int Camera::c_liveViewFrameBufferSize = 0x800000;
+const int Camera::LiveView::c_delay = 200;
+const int Camera::LiveView::c_frameBufferSize = 0x800000;
 
 const int Camera::c_sleepTimeout = 10000;
 const int Camera::c_sleepAmount = 50;
 
-const bool Camera::c_forceJpeg = false;
+const bool Camera::c_forceJpeg = true;
 
 bool Camera::s_initialized = false;
 
@@ -78,29 +78,30 @@ void Camera::initialize()
     EdsInitializeSDK();
 }
 
+Camera::LiveView::LiveView() :
+    m_state(Off),
+    m_streamPtr(NULL)
+{
+    m_imageSize.width = 0;
+    m_imageSize.height = 0;
+}
+
 Camera::Camera(EdsCameraRef cam) :
     m_cam(cam),
-    m_waitingOnPic(false),
-    m_liveViewOn(false),
-    m_waitingToStartLiveView(false),
-    m_stoppingLiveView(false),
-    m_liveViewStreamPtr(NULL),
+    m_liveView(),
     m_pendingZoomPosition(false),
     m_zoomRatio(1),
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingZoomRatio(false),
     m_pendingWhiteBalance(false),
     m_fastPictures(false),
-    m_fastPicturesInteruptingLiveView(false),
-    m_good(false)
+    m_good(false),
+    m_pictureCompleteCallback(NULL)
 {
     // call static initializer
     initialize();
 
-    // TODO: live view pic box and liveviewthread
     // TODO: live view frame buffer and live view buffer handle
-    m_liveViewImageSize.width = 0;
-    m_liveViewImageSize.height = 0;
     m_zoomPosition.x = 0;
     m_zoomPosition.y = 0;
     m_pendingZoomPoint.x = 0;
@@ -222,14 +223,11 @@ EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
             // queue up the transfer request
             TransferItem transfer;
             transfer.sdkRef = inRef;
-            transfer.outFile = m_picOutFolder;
+            transfer.outFile = m_picOutFile;
             m_transferQueue.push(transfer);
         } else {
-            transferOneItem(inRef, m_picOutFolder);
+            transferOneItem(inRef, m_picOutFile);
         }
-
-        // allow other thread to continue
-        m_waitingOnPic = false;
     } else {
         cerr << "DEBUG: objectEventHandler: event " << inEvent << endl;
     }
@@ -243,20 +241,18 @@ EdsError Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
-        if (m_waitingToStartLiveView) {
+        if (m_liveView.m_state == LiveView::WaitingToStart) {
             // start live view thread
             // TODO: AUGH THREADS!
 
-            // save state
-            m_waitingToStartLiveView = false;
-            m_liveViewOn = true;
+            m_liveView.m_state = LiveView::On;
         }
     } else {
         cerr << "DEBUG: propertyEventHandler: propid " << inPropertyID << endl;
     }
 }
 
-void Camera::transferOneItem(EdsBaseRef inRef, string outFolder)
+void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
 {
     // transfer the image in memory to disk
     EdsDirectoryItemInfo dirItemInfo;
@@ -267,13 +263,12 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outFolder)
     err = err || EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
 
     if (err) {
-        cerr << "ERROR: unable to transfer an item: " << err << endl;
+        cerr << "ERROR: unable to get directory item info: " << err << endl;
         return;
     }
 
-    string outfile = pathCombine(outFolder, dirItemInfo.szFileName);
-
     // make sure we don't overwrite files
+    ensurePathExists(getDirectoryName(outfile));
     outfile = makeUnique(outfile);
 
     // get a temp file to write to
@@ -290,7 +285,32 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outFolder)
     // clean up
     err = err || EdsRelease(outStream);
 
+    if (err) {
+        cerr << "ERROR: unable to transfer an item: " << err << endl;
+        return;
+    }
+
     moveFile(tmpfile, outfile);
+
+    resumeLiveView();
+
+    if (m_pictureCompleteCallback)
+        m_pictureCompleteCallback(outfile);
+
+}
+
+void Camera::pauseLiveView()
+{
+    if (m_liveView.m_state == LiveView::On) {
+        stopLiveView();
+        m_liveView.m_state = LiveView::Paused;
+    }
+}
+
+void Camera::resumeLiveView()
+{
+    if (m_liveView.m_state == LiveView::Paused)
+        startLiveView();
 }
 
 void Camera::beginFastPictures()
@@ -301,10 +321,7 @@ void Camera::beginFastPictures()
         return;
     }
 
-    m_fastPicturesInteruptingLiveView = m_liveViewOn;
-    if (m_fastPicturesInteruptingLiveView)
-        stopLiveView();
-
+    pauseLiveView();
     m_fastPictures = true;
 }
 
@@ -319,14 +336,10 @@ void Camera::endFastPictures()
     }
 
     m_fastPictures = false;
-
-    if (m_fastPicturesInteruptingLiveView) {
-        m_fastPicturesInteruptingLiveView = false;
-        // TODO: start live view
-    }
+    resumeLiveView();
 }
 
-void Camera::takeFastPicture(string outFolder)
+void Camera::takeFastPicture(string outFile)
 {
     assert(! m_fastPictures);
     if (! m_fastPictures) {
@@ -334,25 +347,13 @@ void Camera::takeFastPicture(string outFolder)
         return;
     }
 
-    ensurePathExists(outFolder);
-
-    // set flag indicating we are waiting on a callback call
-    m_waitingOnPic = true;
-    m_picOutFolder = outFolder;
-
-    bool tryAgain = true;
-    while (tryAgain) {
-        tryAgain = false;
-        if (! takePicture(outFolder)) {
-            // TODO: sleep sleepAmount
-            tryAgain = true;
-        }
-    }
+    m_picOutFile = outFile;
+    takePicture();
 }
 
 bool Camera::isBusy()
 {
-    return (m_waitingOnPic || m_waitingToStartLiveView);
+    return m_liveView.m_state == LiveView::WaitingToStart || m_liveView.m_state == LiveView::WaitingToStop;
 }
 
 void Camera::setComputerCapabilities()
@@ -369,29 +370,15 @@ void Camera::setComputerCapabilities()
         cerr << "ERROR: unable to set computer capabilities: " << err << endl;
 }
 
-bool Camera::takePicture(string outFile)
+void Camera::takePicture()
 {
     setComputerCapabilities();
 
     // take a picture with the camera and save it to outfile
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
-    if (err != EDS_ERR_OK) {
-        m_waitingOnPic = false;
+    if (err != EDS_ERR_OK)
         cerr << "ERROR: unable to take picture: " << err << endl;
-        return false;
-    }
-
-    for (int i = 0; i < c_sleepTimeout / c_sleepAmount; ++i) {
-        // TODO:
-        // thread.sleep(sleepAmount);
-        // doEvents();
-
-        if (! m_waitingOnPic)
-            return true;
-    }
-
-    return false;
 }
 
 void Camera::updateLiveView()
@@ -404,7 +391,7 @@ void Camera::showLiveViewFrame()
     // TODO
 }
 
-void Camera::takeSinglePicture(string outFolder)
+void Camera::takeSinglePicture(string outFile)
 {
     assert(! isBusy());
     if (isBusy()) {
@@ -412,34 +399,12 @@ void Camera::takeSinglePicture(string outFolder)
         return;
     }
 
-    bool interuptingLiveView = m_liveViewOn;
-    // TODO: picture box code
-    ensurePathExists(outFolder);
-
-
-    if (interuptingLiveView)
-        stopLiveView();
-
-    // set flag indicating we are waiting on a callback call
-    m_waitingOnPic = true;
-    m_picOutFolder = outFolder;
-
-    if (takePicture(outFolder)) {
-        if (interuptingLiveView) {
-            // TODO: start live view
-        }
-    } else {
-        // we never got a callback. throw an error
-        if (interuptingLiveView) {
-            // TODO: start live view
-        }
-
-        m_waitingOnPic = false;
-        cerr << "ERROR: Take picture failed." << endl;
-    }
+    pauseLiveView();
+    m_picOutFile = outFile;
+    takePicture();
 }
 
-void Camera::startLiveView(liveViewFrameCallback callback)
+void Camera::startLiveView()
 {
     // TODO
 }
@@ -451,7 +416,7 @@ void Camera::stopLiveView()
 
 EdsSize Camera::liveViewImageSize() const
 {
-    return m_liveViewImageSize;
+    return m_liveView.m_imageSize;
 }
 
 EdsPoint Camera::zoomPosition() const
@@ -502,3 +467,12 @@ string Camera::name() const
     return deviceInfo.szDeviceDescription;
 }
 
+void Camera::setPictureCompleteCallback(takePictureCompleteCallback callback)
+{
+    m_pictureCompleteCallback = callback;
+}
+
+void Camera::setLiveViewCallback(liveViewFrameCallback callback)
+{
+    m_liveViewFrameCallback = callback;
+}

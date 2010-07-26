@@ -49,7 +49,7 @@ string Filesystem::getDirectoryName(string path)
         return path;
     }
 
-    // everything after the path separator
+    // everything before the path separator
     return path.substr(0, pos - 1);
 
 }
@@ -107,6 +107,10 @@ void Filesystem::moveFile(string source, string dest)
 
 void Filesystem::ensurePathExists(string path)
 {
+    // if it's a root drive, return
+    if (path.length() == 0 || path[path.length()] == ':')
+        return;
+
     // if there is a trailing path separator, remove it
     string upOne;
     if (path[path.length()] == pathSep)
