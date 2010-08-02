@@ -8,3 +8,7 @@ Sample usage:
     
     cam.takeSinglePicture(filename)
 
+To compile the test program in windows:
+
+    g++ -o test.exe test.cpp edsdk/Camera.cpp edsdk/Utils.cpp edsdk/Filesystem.cpp -lEDSDK -lole32
+

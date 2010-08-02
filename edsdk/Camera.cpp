@@ -189,9 +189,8 @@ void Camera::establishSession()
         err = err || EdsSetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs);
     }
 
-    if (err) {
+    if (err)
         cerr << "ERROR: When establishing session: " << err << endl;
-    }
     m_good = (err == 0);
 }
 
@@ -199,6 +198,8 @@ EdsError EDSCALLBACK Camera::staticObjectEventHandler(EdsObjectEvent inEvent, Ed
 {
     // transfer from static to member
     ((Camera *) inContext)->objectEventHandler(inEvent, inRef);
+    if (inRef)
+        EdsRelease(inRef);
     return 0;
 }
 

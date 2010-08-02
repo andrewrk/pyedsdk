@@ -5,12 +5,9 @@ using namespace std;
 
 #include <windows.h>
 
-bool quit = true;
-
 void pictureDone(string filename)
 {
     cout << "picture which was saved to " << filename << " is done.";
-    quit = true;
 }
 
 int main() {
@@ -25,9 +22,10 @@ int main() {
         cout << "Taking a picture to c:\\testpics\\hi.jpg" << endl;
         cam->takeSinglePicture("C:\\testpics\\hi.jpg");
 
-        quit = false;
-        while(! quit){
-            Sleep(1);
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
     }
 
