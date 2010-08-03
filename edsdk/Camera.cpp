@@ -96,7 +96,10 @@ Camera::Camera(EdsCameraRef cam) :
     m_pendingWhiteBalance(false),
     m_fastPictures(false),
     m_good(false),
-    m_pictureCompleteCallback(NULL)
+    m_pictureCompleteCallback(NULL),
+    m_pictureCompleteContext(NULL),
+    m_liveViewFrameCallback(NULL),
+    m_liveViewFrameContext(NULL)
 {
     // call static initializer
     initialize();
@@ -302,7 +305,7 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     resumeLiveView();
 
     if (m_pictureCompleteCallback)
-        m_pictureCompleteCallback(outfile);
+        m_pictureCompleteCallback(outfile, m_pictureCompleteContext);
 
 }
 
@@ -474,14 +477,16 @@ string Camera::name() const
     return deviceInfo.szDeviceDescription;
 }
 
-void Camera::setPictureCompleteCallback(takePictureCompleteCallback callback)
+void Camera::setPictureCompleteCallback(takePictureCompleteCallback callback, void * context)
 {
     m_pictureCompleteCallback = callback;
+    m_pictureCompleteContext = context;
 }
 
-void Camera::setLiveViewCallback(liveViewFrameCallback callback)
+void Camera::setLiveViewCallback(liveViewFrameCallback callback, void * context)
 {
     m_liveViewFrameCallback = callback;
+    m_liveViewFrameContext = context;
 }
 
 bool Camera::good() const

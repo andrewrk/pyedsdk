@@ -1,6 +1,7 @@
 #include <Python.h>
 
 #include "Camera.h"
+#include <string>
 
 extern "C" {
     static PyObject * ErrorObject;
@@ -9,6 +10,8 @@ extern "C" {
         PyObject_HEAD
         PyObject * x_attr; // attributes dictionary
         Camera * camera; // C++ object
+        PyObject * pictureCompleteCallback;
+        PyObject * liveViewFrameCallback;
     } CameraObject;
 
     static void Camera_dealloc(CameraObject * self);
@@ -206,6 +209,50 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
+    static void camera_pictureCompleteCallback(std::string filename, void * context)
+    {
+        fprintf(stderr, "getting camera object...\n");
+        CameraObject * self = (CameraObject *) context;
+        fprintf(stderr, "building arg list...\n");
+        PyObject * arglist = Py_BuildValue("(s)", filename.c_str());
+        fprintf(stderr, "calling the callback...\n");
+        fprintf(stderr, "callback address: %i...\n", (int) (void *) self->pictureCompleteCallback);
+        PyObject * result = PyObject_CallObject(self->pictureCompleteCallback, arglist);
+        fprintf(stderr, "decrementing arglist ref...\n");
+        Py_DECREF(arglist);
+        if (! result)
+            return;
+        fprintf(stderr, "decrementing result ref...\n");
+        Py_DECREF(result);
+
+    }
+
+    static PyObject * Camera_setPictureCompleteCallback(CameraObject * self, PyObject * args)
+    {
+        PyObject * temp;
+
+        if (! PyArg_ParseTuple(args, "O:setPictureCompleteCallback", &temp))
+            return NULL;
+
+        if (! PyCallable_Check(temp)) {
+            PyErr_SetString(PyExc_TypeError, "parameter must be callable");
+            return NULL;
+        }
+
+        // add a reference to new callback
+        Py_XINCREF(temp);
+
+        // dispose of previous callback
+        Py_XDECREF(self->pictureCompleteCallback);
+
+        // remember new callback
+        self->pictureCompleteCallback = temp;
+
+        self->camera->setPictureCompleteCallback(&camera_pictureCompleteCallback, self);
+
+        Py_RETURN_NONE; 
+    }
+
     static PyMethodDef Camera_methods[] = {
         {"good",                (PyCFunction)Camera_good,                METH_VARARGS},
         {"name",                (PyCFunction)Camera_name,                METH_VARARGS},
@@ -213,7 +260,7 @@ extern "C" {
         {"beginFastPictures",   (PyCFunction)Camera_beginFastPictures,   METH_VARARGS},
         {"takeFastPicture",     (PyCFunction)Camera_takeFastPicture,     METH_VARARGS},
         {"endFastPictures",     (PyCFunction)Camera_endFastPictures,     METH_VARARGS},
-        //{"setPictureCompleteCallback", (PyCFunction)Camera_setPictureCompleteCallback, METH_VARARGS},
+        {"setPictureCompleteCallback", (PyCFunction)Camera_setPictureCompleteCallback, METH_VARARGS},
         //{"setLiveViewCallback", (PyCFunction)Camera_setLiveViewCallback, METH_VARARGS},
         {"startLiveView",       (PyCFunction)Camera_startLiveView,       METH_VARARGS},
         {"stopLiveView",        (PyCFunction)Camera_stopLiveView,        METH_VARARGS},
@@ -269,6 +316,8 @@ extern "C" {
 
         self->x_attr = NULL;
         self->camera = Camera::getFirstCamera();
+        self->pictureCompleteCallback = NULL;
+        self->liveViewFrameCallback = NULL;
 
         return (PyObject *) self;
     }
