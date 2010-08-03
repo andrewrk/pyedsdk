@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include <windows.h>
 
 #include "Filesystem.h"
 using namespace Filesystem;
@@ -87,12 +88,12 @@ Camera::LiveView::LiveView() :
 }
 
 Camera::Camera(EdsCameraRef cam) :
-    m_cam(cam),
     m_liveView(),
+    m_cam(cam),
     m_pendingZoomPosition(false),
     m_zoomRatio(1),
-    m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingZoomRatio(false),
+    m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
     m_fastPictures(false),
     m_good(false),
@@ -198,8 +199,6 @@ EdsError EDSCALLBACK Camera::staticObjectEventHandler(EdsObjectEvent inEvent, Ed
 {
     // transfer from static to member
     ((Camera *) inContext)->objectEventHandler(inEvent, inRef);
-    if (inRef)
-        EdsRelease(inRef);
     return 0;
 }
 
@@ -232,11 +231,13 @@ EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
     } else {
         cerr << "DEBUG: objectEventHandler: event " << inEvent << endl;
     }
+    return EDS_ERR_OK;
 }
 
 EdsError Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 {
     cerr << "DEBUG: stateEventHandler: event " << inEvent << ", parameter " << inEventData << endl;
+    return EDS_ERR_OK;
 }
 
 EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
@@ -244,6 +245,8 @@ EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID in
     if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
         if (m_liveView.m_state == LiveView::WaitingToStart) {
             // start live view thread
+            // CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+
             // TODO: AUGH THREADS!
 
             m_liveView.m_state = LiveView::On;
@@ -251,6 +254,7 @@ EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID in
     } else {
         cerr << "DEBUG: propertyEventHandler: propid " << inPropertyID << endl;
     }
+    return EDS_ERR_OK;
 }
 
 void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
@@ -342,7 +346,7 @@ void Camera::endFastPictures()
 
 void Camera::takeFastPicture(string outFile)
 {
-    assert(! m_fastPictures);
+    assert(m_fastPictures);
     if (! m_fastPictures) {
         cerr << "ERROR: must be in fast picture mode to take a fast picture." << endl;
         return;
@@ -477,3 +481,9 @@ void Camera::setLiveViewCallback(liveViewFrameCallback callback)
 {
     m_liveViewFrameCallback = callback;
 }
+
+bool Camera::good() const
+{
+    return m_good;
+}
+

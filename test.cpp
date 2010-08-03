@@ -11,8 +11,6 @@ void pictureDone(string filename)
 }
 
 int main() {
-    CoInitializeEx(0, 2);
-
     cout << "Grabbing the first camera" << endl;
     Camera * cam = Camera::getFirstCamera();
 

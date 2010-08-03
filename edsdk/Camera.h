@@ -25,8 +25,13 @@ class Camera
         };
 
     public: // methods
+        ~Camera();
+
         // you are responsible for deleting it when you're done
         static Camera * getFirstCamera();
+
+        // true if everything is ok
+        bool good() const;
 
         // name of the camera model
         string name() const;
@@ -148,13 +153,10 @@ class Camera
 
         takePictureCompleteCallback m_pictureCompleteCallback;
         liveViewFrameCallback m_liveViewFrameCallback;
-
-        // TODO: we left out CoInitializeEx. make sure it still works.
     private: // methods
         static void initialize();
 
         Camera(EdsCameraRef cam);
-        ~Camera();
 
         CameraModelData cameraSpecificData() const;
 

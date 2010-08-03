@@ -1,26 +1,32 @@
 from distutils.core import setup, Extension
 
 # http://docs.python.org/distutils/apiref.html#distutils.core.Extension
-edsdk = Extension(
-    'edsdkmodule',
+camera = Extension(
+    'Camera',
     sources = [
-        'daw/Flp.cpp',
-        'daw/Utils.cpp',
-        'daw/FlpModule.cpp',
+        'edsdk/Camera.cpp',
+        'edsdk/Utils.cpp',
+        'edsdk/Filesystem.cpp',
+        'edsdk/CameraModule.cpp',
     ],
     include_dirs = [
-        'daw'
+        'edsdk',
+    ],
+    libraries = [
+        'ole32',
+        'EDSDK',
     ],
 )
 
 setup(
     name='edsdk',
-    version=__import__('edsdk').__version__,
+    version='0.1',
     author="Andrew Kelley",
     author_email="superjoe30@gmail.com",
     url="http://github.com/superjoe30/pyedsdk",
-    description='Python library to control cameras via EDSDK',
+    description='Python library to control Canon cameras via EDSDK',
     license="GPL",
-    ext_modules=[flp],
-    packages=["daw"],
+    ext_modules=[camera],
+    ext_package="edsdk",
+    packages=["edsdk"],
 )
