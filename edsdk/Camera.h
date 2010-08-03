@@ -14,10 +14,8 @@ using namespace std;
 class Camera
 {
     public: // variables
-        // frame has the binary image data.
-        // context is a pointer to anything you set when you set the callback.
-        typedef void (* liveViewFrameCallback) (char * frame, void * context);
-        typedef void (* takePictureCompleteCallback) (string filename, void * context);
+        typedef void (* liveViewFrameCallback) (char * frame);
+        typedef void (* takePictureCompleteCallback) (string filename);
 
         enum CameraState {
             Ready,
@@ -46,13 +44,11 @@ class Camera
         void takeFastPicture(string outFile);
         void endFastPictures();
 
-        // if you want to be notified when a picture is finally done, use this.
-        // context is a pointer to anything you want, which will be returned to you upon callback.
-        void setPictureCompleteCallback(takePictureCompleteCallback callback, void * context);
+        // if you want to be notified when a picture is finally done, use this:
+        void setPictureCompleteCallback(takePictureCompleteCallback callback);
 
         // set the function that will be called for each live view frame
-        // context is a pointer to anything you want, which will be returned to you upon callback.
-        void setLiveViewCallback(liveViewFrameCallback callback, void * context);
+        void setLiveViewCallback(liveViewFrameCallback callback);
         void startLiveView();
         void stopLiveView();
 
@@ -156,10 +152,7 @@ class Camera
         bool m_good;
 
         takePictureCompleteCallback m_pictureCompleteCallback;
-        void * m_pictureCompleteContext; // holds a pointer to user data passed in the callback
-
         liveViewFrameCallback m_liveViewFrameCallback;
-        void * m_liveViewFrameContext;
     private: // methods
         static void initialize();
 
