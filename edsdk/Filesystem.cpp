@@ -37,7 +37,7 @@ string Filesystem::getFilenameWithoutExtension(string path)
         return title;
     }
     // everything before the period
-    return title.substr(0, pos-1);
+    return title.substr(0, pos);
 }
 
 string Filesystem::getDirectoryName(string path)

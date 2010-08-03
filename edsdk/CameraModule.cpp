@@ -206,6 +206,24 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
+    static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        return Py_BuildValue("s", self->camera->popPictureDoneQueue().c_str());
+    }
+
+    static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int count = self->camera->pictureDoneQueueSize();
+
+        return Py_BuildValue("i", count);
+    }
+
     static PyMethodDef Camera_methods[] = {
         {"good",                (PyCFunction)Camera_good,                METH_VARARGS},
         {"name",                (PyCFunction)Camera_name,                METH_VARARGS},
@@ -224,8 +242,10 @@ extern "C" {
         {"setZoomRatio",        (PyCFunction)Camera_setZoomRatio,        METH_VARARGS},
         {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS},
         {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS},
+        {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS},
+        {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS},
 
-        {NULL,      NULL} // sentinel
+        {NULL, NULL} // sentinel
     };
 
     static PyObject * Camera_getattr(CameraObject * self, char * name)

@@ -69,6 +69,11 @@ class Camera
         EdsWhiteBalance whiteBalance() const;
         void setWhiteBalance(EdsWhiteBalance whiteBalance);
 
+        // get the oldest message from the event queue and remove it.
+        // the return value is the filename of the completed picture
+        string popPictureDoneQueue();
+        int pictureDoneQueueSize() const;
+
     private: // variables
         static bool s_initialized;
 
@@ -147,6 +152,7 @@ class Camera
 
         // pictures we need to download but are saving for later
         queue<TransferItem> m_transferQueue;
+        queue<string> m_pictureDoneQueue;
 
         // true if everything is working
         bool m_good;

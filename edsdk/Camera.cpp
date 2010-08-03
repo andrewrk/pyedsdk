@@ -304,6 +304,7 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     if (m_pictureCompleteCallback)
         m_pictureCompleteCallback(outfile);
 
+    m_pictureDoneQueue.push(outfile);
 }
 
 void Camera::pauseLiveView()
@@ -489,3 +490,18 @@ bool Camera::good() const
     return m_good;
 }
 
+int Camera::pictureDoneQueueSize() const
+{
+    return m_pictureDoneQueue.size();
+}
+
+string Camera::popPictureDoneQueue()
+{
+    if (pictureDoneQueueSize() == 0) {
+        return string();
+    } else {
+        string value = m_pictureDoneQueue.front();
+        m_pictureDoneQueue.pop();
+        return value;
+    }
+}

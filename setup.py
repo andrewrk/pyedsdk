@@ -2,7 +2,7 @@ from distutils.core import setup, Extension
 
 # http://docs.python.org/distutils/apiref.html#distutils.core.Extension
 camera = Extension(
-    'Camera',
+    'edsdk.Camera',
     sources = [
         'edsdk/Camera.cpp',
         'edsdk/Utils.cpp',
@@ -27,6 +27,5 @@ setup(
     description='Python library to control Canon cameras via EDSDK',
     license="GPL",
     ext_modules=[camera],
-    ext_package="edsdk",
     packages=["edsdk"],
 )
