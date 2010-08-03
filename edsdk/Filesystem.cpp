@@ -1,7 +1,6 @@
 #include "Filesystem.h"
 
 #include <fstream>
-#include <iostream>
 #include <cstdio>
 using namespace std;
 
@@ -50,7 +49,7 @@ string Filesystem::getDirectoryName(string path)
     }
 
     // everything before the path separator
-    return path.substr(0, pos - 1);
+    return path.substr(0, pos);
 
 }
 
@@ -100,7 +99,7 @@ void Filesystem::moveFile(string source, string dest)
 {
     if (rename(source.c_str(), dest.c_str()) != 0) {
         // error
-        cerr << "ERROR: could not move " << source << " to " << dest << endl;
+        fprintf(stderr, "ERROR: could not move %s to %s\n", source.c_str(), dest.c_str());
         perror("(above)");
     }
 }

@@ -167,9 +167,9 @@ class Camera
         static EdsError EDSCALLBACK staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext);
         static EdsError EDSCALLBACK staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext);
 
-        EdsError objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef);
-        EdsError stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData);
-        EdsError propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam);
+        void objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef);
+        void stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData);
+        void propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam);
 
         string ensureDoesNotExist(string outfile);
 

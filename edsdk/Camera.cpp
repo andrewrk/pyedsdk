@@ -5,7 +5,6 @@
 using namespace Filesystem;
 
 #include <cstdio>
-#include <iostream>
 #include <cassert>
 using namespace std;
 
@@ -131,7 +130,7 @@ Camera * Camera::getFirstCamera()
     err = err || EdsGetChildCount(camList, &camCount);
 
     if (camCount == 0) {
-        cerr << "ERROR: No camera connected." << endl;
+        fprintf(stderr, "ERROR: No camera connected.\n");
         if (camList)
             EdsRelease(camList);
         return NULL;
@@ -147,7 +146,7 @@ Camera * Camera::getFirstCamera()
     err = err || EdsRelease(camList);
 
     if (err) {
-        cerr << "ERROR: Error occurred when getting first camera: " << err << endl;
+        fprintf(stderr, "ERROR: Error occurred when getting first camera: %u\n", err);
     }
 
     return cam;
@@ -191,20 +190,25 @@ void Camera::establishSession()
     }
 
     if (err)
-        cerr << "ERROR: When establishing session: " << err << endl;
+        fprintf(stderr, "ERROR: When establishing session: %u\n", err);
+
     m_good = (err == 0);
 }
 
 EdsError EDSCALLBACK Camera::staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
 {
     // transfer from static to member
+    assert(inContext);
     ((Camera *) inContext)->objectEventHandler(inEvent, inRef);
+    if (inRef)
+        EdsRelease(inRef);
     return 0;
 }
 
 EdsError EDSCALLBACK Camera::staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext)
 {
     // transfer from static to member
+    assert(inContext);
     ((Camera *) inContext)->stateEventHandler(inEvent, inEventData);
     return 0;
 }
@@ -212,11 +216,12 @@ EdsError EDSCALLBACK Camera::staticStateEventHandler(EdsStateEvent inEvent, EdsU
 EdsError EDSCALLBACK Camera::staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext)
 {
     // transfer from static to member
+    assert(inContext);
     ((Camera *) inContext)->propertyEventHandler(inEvent, inPropertyID, inParam);
     return 0;
 }
 
-EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
+void Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
 {
     if (inEvent == kEdsObjectEvent_DirItemRequestTransfer) {
         if (m_fastPictures) {
@@ -229,18 +234,16 @@ EdsError Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
             transferOneItem(inRef, m_picOutFile);
         }
     } else {
-        cerr << "DEBUG: objectEventHandler: event " << inEvent << endl;
+        fprintf(stderr, "DEBUG: objectEventHandler: event %u\n", inEvent);
     }
-    return EDS_ERR_OK;
 }
 
-EdsError Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
+void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 {
-    cerr << "DEBUG: stateEventHandler: event " << inEvent << ", parameter " << inEventData << endl;
-    return EDS_ERR_OK;
+    fprintf(stderr, "DEBUG: stateEventHandler: event %u, parameter %u\n", inEvent, inEventData);
 }
 
-EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
+void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
         if (m_liveView.m_state == LiveView::WaitingToStart) {
@@ -252,9 +255,8 @@ EdsError Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID in
             m_liveView.m_state = LiveView::On;
         }
     } else {
-        cerr << "DEBUG: propertyEventHandler: propid " << inPropertyID << endl;
+        fprintf(stderr, "DEBUG: propertyEventHandler: propid %u\n", inPropertyID);
     }
-    return EDS_ERR_OK;
 }
 
 void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
@@ -268,7 +270,7 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = err || EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
 
     if (err) {
-        cerr << "ERROR: unable to get directory item info: " << err << endl;
+        fprintf(stderr, "ERROR: unable to get directory item info: %u\n", err);
         return;
     }
 
@@ -291,7 +293,7 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = err || EdsRelease(outStream);
 
     if (err) {
-        cerr << "ERROR: unable to transfer an item: " << err << endl;
+        fprintf(stderr, "ERROR: unable to transfer an item: %u\n", err);
         return;
     }
 
@@ -322,7 +324,7 @@ void Camera::beginFastPictures()
 {
     assert(! isBusy());
     if (isBusy()) {
-        cerr << "ERROR: can't begin fast pictures, camera is busy." << endl;   
+        fprintf(stderr, "ERROR: can't begin fast pictures, camera is busy.\n");
         return;
     }
 
@@ -348,7 +350,7 @@ void Camera::takeFastPicture(string outFile)
 {
     assert(m_fastPictures);
     if (! m_fastPictures) {
-        cerr << "ERROR: must be in fast picture mode to take a fast picture." << endl;
+        fprintf(stderr, "ERROR: must be in fast picture mode to take a fast picture.\n");
         return;
     }
 
@@ -372,7 +374,7 @@ void Camera::setComputerCapabilities()
     EdsError err = EdsSetCapacity(m_cam, caps);
 
     if (err)
-        cerr << "ERROR: unable to set computer capabilities: " << err << endl;
+        fprintf(stderr, "ERROR: unable to set computer capabilities: %u\n", err);
 }
 
 void Camera::takePicture()
@@ -383,7 +385,7 @@ void Camera::takePicture()
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
     if (err != EDS_ERR_OK)
-        cerr << "ERROR: unable to take picture: " << err << endl;
+        fprintf(stderr, "ERROR: unable to take picture: %u\n", err);
 }
 
 void Camera::updateLiveView()
@@ -400,7 +402,7 @@ void Camera::takeSinglePicture(string outFile)
 {
     assert(! isBusy());
     if (isBusy()) {
-        cerr << "ERROR: can't take picture, camera is busy." << endl;   
+        fprintf(stderr, "ERROR: can't take picture, camera is busy.\n");
         return;
     }
 
@@ -450,7 +452,7 @@ EdsWhiteBalance Camera::whiteBalance() const
 {
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_WhiteBalance, 0, sizeof(m_whiteBalance), (EdsVoid *) &m_whiteBalance);
     if (err)
-        cerr << "ERROR: Unable to get white balance: " << err << endl;
+        fprintf(stderr, "ERROR: Unable to get white balance: %u\n", err);
     return m_whiteBalance;
 }
 void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
@@ -465,7 +467,7 @@ string Camera::name() const
     EdsError err = EdsGetDeviceInfo(m_cam, &deviceInfo);
 
     if (err) {
-        cerr << "ERROR: Unable to get device info: " << err << endl;
+        fprintf(stderr, "ERROR: Unable to get device info: %u\n", err);
         return string();
     }
 
