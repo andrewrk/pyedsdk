@@ -85,11 +85,15 @@ Camera::LiveView::LiveView() :
     m_imageSize.width = 0;
     m_imageSize.height = 0;
     
+    // set up buffer
     m_frameBuffer = new unsigned char[c_frameBufferSize];
+    EdsError err = EDS_ERR_OK;
+    err = err || EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
 }
 
 Camera::LiveView::~LiveView()
 {
+    EdsRelease(m_streamPtr);
     delete[] m_frameBuffer;
 }
 
@@ -107,7 +111,6 @@ Camera::Camera(EdsCameraRef cam) :
     // call static initializer
     initialize();
 
-    // TODO: live view frame buffer and live view buffer handle
     m_zoomPosition.x = 0;
     m_zoomPosition.y = 0;
     m_pendingZoomPoint.x = 0;
@@ -246,13 +249,11 @@ void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
+        // TODO: actually check the property value instead of assuming it's going to do what we want.
         if (m_liveView.m_state == LiveView::WaitingToStart) {
-            // start live view thread
-            // CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-
-            // TODO: AUGH THREADS!
-
             m_liveView.m_state = LiveView::On;
+        } else if (m_liveView.m_state == LiveView::WaitingToStop) {
+            m_liveView.m_state = LiveView::Off;
         }
     } else {
         fprintf(stderr, "DEBUG: propertyEventHandler: propid %u\n", inPropertyID);
@@ -351,16 +352,6 @@ void Camera::takePicture()
         fprintf(stderr, "ERROR: unable to take picture: %u\n", err);
 }
 
-void Camera::updateLiveView()
-{
-    // TODO
-}
-
-void Camera::showLiveViewFrame()
-{
-    // TODO
-}
-
 void Camera::takeSinglePicture(string outFile)
 {
     assert(! isBusy());
@@ -372,21 +363,6 @@ void Camera::takeSinglePicture(string outFile)
     pauseLiveView();
     m_picOutFile = outFile;
     takePicture();
-}
-
-void Camera::startLiveView()
-{
-    // TODO
-}
-
-void Camera::stopLiveView()
-{
-    // TODO
-}
-
-EdsSize Camera::liveViewImageSize() const
-{
-    return m_liveView.m_imageSize;
 }
 
 EdsPoint Camera::zoomPosition() const
@@ -442,11 +418,6 @@ void Camera::setPictureCompleteCallback(takePictureCompleteCallback callback)
     m_pictureCompleteCallback = callback;
 }
 
-void Camera::setLiveViewCallback(liveViewFrameCallback callback)
-{
-    m_liveViewFrameCallback = callback;
-}
-
 bool Camera::good() const
 {
     return m_good;
@@ -477,3 +448,108 @@ int Camera::liveViewFrameBufferSize() const
 {
     return m_liveView.c_frameBufferSize;
 }
+
+void Camera::grabLiveViewFrame()
+{
+    // skip frames if the camera isn't ready yet.
+    if (m_liveView.m_state != LiveView::On) {
+        fprintf(stderr, "WARNING: Skipping live view frame because camera is not in live view mode yet.\n");
+        return;
+    }
+
+    EdsError err = EDS_ERR_OK;
+    EdsImageRef img;
+    // create image
+    err = err || EdsCreateEvfImageRef(m_liveView.m_streamPtr, &img);
+    if (err) {
+        fprintf(stderr, "ERROR: Unable to create live view frame on the camera.\n");
+        return;
+    }
+
+    // download the frame
+    err = err || EdsDownloadEvfImage(m_cam, img);
+
+    if (err == EDS_ERR_OBJECT_NOTREADY) {
+        // skip the frame if the camera isn't ready
+        fprintf(stderr, "ERROR: skipping live view frame because camera isn't ready\n");
+        EdsRelease(img);
+        return;
+    } else if (err) {
+        // skip the frame. unknown error
+        fprintf(stderr, "ERROR: skipping live view frame: %u\n", err);
+        EdsRelease(img);
+        return;
+    }
+
+    // get/set zoom ratio
+    if (m_pendingZoomRatio) {
+        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio))
+            m_pendingZoomRatio = false;
+    } else {
+        EdsGetPropertyData(img, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
+    }
+
+    // get/set zoom position
+    if (m_pendingZoomPosition) {
+        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_pendingZoomPoint))
+            m_pendingZoomPosition = false;
+    } else {
+        EdsGetPropertyData(img, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_zoomPosition);
+    }
+
+    // set white balance
+    if (m_pendingWhiteBalance) {
+        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_WhiteBalance, 0, sizeof(EdsWhiteBalance), &m_whiteBalance))
+            m_pendingWhiteBalance = false;
+    }
+
+    EdsRelease(img);
+}
+
+void Camera::startLiveView()
+{
+    // it's kind of tricky to handle this, so we put it off for a TODO
+    assert(m_liveView.m_state != LiveView::WaitingToStop);
+
+    if (m_liveView.m_state == LiveView::WaitingToStart)
+        return;
+
+    // tell the computer to send live data to the computer
+    EdsError err = EDS_ERR_OK;
+    EdsUInt32 device;
+    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+    device |= kEdsEvfOutputDevice_PC;
+    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err)
+        fprintf(stderr, "ERROR: Unable to turn on live view: %u\n", err);
+    else
+        m_liveView.m_state = LiveView::WaitingToStart;
+}
+
+void Camera::stopLiveView()
+{
+    // it's kind of tricky to handle this, so we put it off for a TODO
+    assert(m_liveView.m_state != LiveView::WaitingToStart);
+
+    if (m_liveView.m_state == LiveView::WaitingToStop)
+        return;
+
+    // tell the camera to stop sending live data to the computer
+    EdsError err = EDS_ERR_OK;
+    EdsUInt32 device;
+    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+    device &= ~kEdsEvfOutputDevice_PC;
+    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err)
+        fprintf(stderr, "ERROR: Unable to turn off live view: %u\n", err);
+    else
+        m_liveView.m_state = LiveView::WaitingToStop;
+}
+
+EdsSize Camera::liveViewImageSize() const
+{
+    return m_liveView.m_imageSize;
+}
+

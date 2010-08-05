@@ -14,7 +14,6 @@ using namespace std;
 class Camera
 {
     public: // variables
-        typedef void (* liveViewFrameCallback) ();
         typedef void (* takePictureCompleteCallback) (string filename);
 
         enum CameraState {
@@ -43,11 +42,11 @@ class Camera
         // if you want to be notified when a picture is finally done, use this:
         void setPictureCompleteCallback(takePictureCompleteCallback callback);
 
-        // set the function that will be called for each live view frame.
-        // when you get a callback you can use liveViewFrameBuffer() to get access to the frames.
-        void setLiveViewCallback(liveViewFrameCallback callback);
+        // you have to put the camera in "live view mode" before you can get live view frames.
         void startLiveView();
         void stopLiveView();
+        // this function refreshes the frame buffe with a new image from the camera.
+        void grabLiveViewFrame();
 
         // size of the frames coming through live view. only valid once
         // live view has started.
@@ -140,7 +139,7 @@ class Camera
         EdsPoint m_zoomPosition;
         bool m_pendingZoomPosition;
         EdsPoint m_pendingZoomPoint;
-        int m_zoomRatio;
+        EdsUInt32 m_zoomRatio;
         bool m_pendingZoomRatio;
         EdsWhiteBalance m_whiteBalance;
         bool m_pendingWhiteBalance;
@@ -159,7 +158,6 @@ class Camera
         bool m_good;
 
         takePictureCompleteCallback m_pictureCompleteCallback;
-        liveViewFrameCallback m_liveViewFrameCallback;
     private: // methods
         static void initialize();
 
@@ -186,9 +184,6 @@ class Camera
 
         // internal take picture function
         void takePicture();
-
-        void updateLiveView();
-        void showLiveViewFrame();
 
         void pauseLiveView();
         void resumeLiveView();

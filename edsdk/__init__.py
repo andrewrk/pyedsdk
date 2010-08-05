@@ -47,17 +47,8 @@ class Camera:
     def name(self):
         return self._camera.name()
 
-    def takeSinglePicture(self, filename):
+    def takePicture(self, filename):
         return self._camera.takeSinglePicture(filename)
-
-    def beginFastPictures(self):
-        return self._camera.beginFastPictures()
-
-    def takeFastPicture(self, filename):
-        return self._camera.takeFastPicture(filename)
-
-    def endFastPictures(self):
-        return self._camera.endFastPictures()
 
     def setPictureCompleteCallback(self, callback):
         """
@@ -78,6 +69,22 @@ class Camera:
     def stopLiveView(self):
         self._camera.stopLiveView()
         self._liveViewOn = False
+
+    def grabLiveViewFrame(self):
+        """
+        tell the camera to refresh its frame buffer with a new live view
+        frame from the camera.
+        """
+        if not self._liveViewOn:
+            self.startLiveView()
+        self._camera.grabLiveViewFrame()
+
+    def liveViewMemoryView(self):
+        """
+        use this method to get a memoryview object which you can use to
+        directly access frame image data.
+        """
+        return memoryview(self._camera)
 
     def liveViewImageSize(self):
         return self._camera.liveViewImageSize()

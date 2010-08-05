@@ -32,6 +32,8 @@ extern "C" {
     static PyObject * Camera_setWhiteBalance(CameraObject * self, PyObject * args);
     static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args);
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
+    static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
+    static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
     static PyMethodDef CameraMethods[] = {
         {"good",                (PyCFunction)Camera_good,                METH_VARARGS, "Return whether the Camera is working"},
         {"name",                (PyCFunction)Camera_name,                METH_VARARGS, "Return the model name of the camera"},
@@ -48,6 +50,7 @@ extern "C" {
         {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS, "sets the while balance setting"},
         {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
+        {"grabLiveViewFrame",   (PyCFunction)Camera_grabLiveViewFrame,   METH_VARARGS, "refresh the frame buffer with a new frame from the camera."},
 
         {NULL, NULL, 0, NULL} // sentinel
     };
@@ -245,26 +248,45 @@ extern "C" {
         return Py_BuildValue("i", count);
     }
 
+    static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+        
+        self->camera->grabLiveViewFrame();
+
+        Py_RETURN_NONE;
+    }
+
+    // -----
+
     static int Camera_getbuffer(CameraObject * self, PyObject * _view, int flags)
     {
+
         Py_buffer * view = (Py_buffer *) _view;
         view->buf = (void *) self->camera->liveViewFrameBuffer();
         view->len = self->camera->liveViewFrameBufferSize();
         view->readonly = 1;
-        view->format = NULL;
-        view->ndim = 0;
-        view->shape = 0;
-        view->strides = 0;
-        view->suboffsets = 0;
-        view->itemsize = 0;
+        view->format = "B";
+        view->ndim = 1;
+        view->shape = new Py_ssize_t[1];
+        view->shape[0] = view->len;
+        view->strides = new Py_ssize_t[1];
+        view->strides[0] = 1;
+        view->suboffsets = new Py_ssize_t[1];
+        view->suboffsets[0] = -1;
+        view->itemsize = 1;
 
         // wtf do we return?
         return 0;
     }
 
-    static void Camera_releasebuffer(CameraObject * self, PyObject * view)
+    static void Camera_releasebuffer(CameraObject * self, PyObject * _view)
     {
-        // nothing to do
+        Py_buffer * view = (Py_buffer *) _view;
+        delete[] view->shape;
+        delete[] view->strides;
+        delete[] view->suboffsets;
     }
     /* --------------------------------------------------------------------- */
 
