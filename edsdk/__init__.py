@@ -1,4 +1,4 @@
-import Camera as CppCamera
+from . import Camera as CppCamera
 import threading, time
 
 __version__ = '0.1'

@@ -84,6 +84,13 @@ Camera::LiveView::LiveView() :
 {
     m_imageSize.width = 0;
     m_imageSize.height = 0;
+    
+    m_frameBuffer = new unsigned char[c_frameBufferSize];
+}
+
+Camera::LiveView::~LiveView()
+{
+    delete[] m_frameBuffer;
 }
 
 Camera::Camera(EdsCameraRef cam) :
@@ -94,7 +101,6 @@ Camera::Camera(EdsCameraRef cam) :
     m_pendingZoomRatio(false),
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
-    m_fastPictures(false),
     m_good(false),
     m_pictureCompleteCallback(NULL)
 {
@@ -140,14 +146,16 @@ Camera * Camera::getFirstCamera()
     EdsCameraRef camHandle;
     err = err || EdsGetChildAtIndex(camList, 0, &camHandle);
 
-    Camera * cam = new Camera(camHandle);
+    Camera * cam = NULL;
+    
+    if (! err)
+        cam = new Camera(camHandle);
 
     // release the camera list data
     err = err || EdsRelease(camList);
 
-    if (err) {
+    if (err)
         fprintf(stderr, "ERROR: Error occurred when getting first camera: %u\n", err);
-    }
 
     return cam;
 }
@@ -224,15 +232,7 @@ EdsError EDSCALLBACK Camera::staticPropertyEventHandler(EdsPropertyEvent inEvent
 void Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
 {
     if (inEvent == kEdsObjectEvent_DirItemRequestTransfer) {
-        if (m_fastPictures) {
-            // queue up the transfer request
-            TransferItem transfer;
-            transfer.sdkRef = inRef;
-            transfer.outFile = m_picOutFile;
-            m_transferQueue.push(transfer);
-        } else {
-            transferOneItem(inRef, m_picOutFile);
-        }
+        transferOneItem(inRef, m_picOutFile);
     } else {
         fprintf(stderr, "DEBUG: objectEventHandler: event %u\n", inEvent);
     }
@@ -319,44 +319,6 @@ void Camera::resumeLiveView()
 {
     if (m_liveView.m_state == LiveView::Paused)
         startLiveView();
-}
-
-void Camera::beginFastPictures()
-{
-    assert(! isBusy());
-    if (isBusy()) {
-        fprintf(stderr, "ERROR: can't begin fast pictures, camera is busy.\n");
-        return;
-    }
-
-    pauseLiveView();
-    m_fastPictures = true;
-}
-
-void Camera::endFastPictures()
-{
-    if (! m_fastPictures)
-        return;
-
-    while (m_transferQueue.size() > 0) {
-        TransferItem transfer = m_transferQueue.front();
-        transferOneItem(transfer.sdkRef, transfer.outFile);
-    }
-
-    m_fastPictures = false;
-    resumeLiveView();
-}
-
-void Camera::takeFastPicture(string outFile)
-{
-    assert(m_fastPictures);
-    if (! m_fastPictures) {
-        fprintf(stderr, "ERROR: must be in fast picture mode to take a fast picture.\n");
-        return;
-    }
-
-    m_picOutFile = outFile;
-    takePicture();
 }
 
 bool Camera::isBusy()
@@ -504,4 +466,14 @@ string Camera::popPictureDoneQueue()
         m_pictureDoneQueue.pop();
         return value;
     }
+}
+
+const unsigned char * Camera::liveViewFrameBuffer() const
+{
+    return m_liveView.m_frameBuffer;
+}
+
+int Camera::liveViewFrameBufferSize() const
+{
+    return m_liveView.c_frameBufferSize;
 }

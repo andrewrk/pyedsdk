@@ -14,7 +14,7 @@ using namespace std;
 class Camera
 {
     public: // variables
-        typedef void (* liveViewFrameCallback) (char * frame);
+        typedef void (* liveViewFrameCallback) ();
         typedef void (* takePictureCompleteCallback) (string filename);
 
         enum CameraState {
@@ -40,14 +40,11 @@ class Camera
         // returns immediately but the picture won't be finished immediately.
         void takeSinglePicture(string outFile);
 
-        void beginFastPictures();
-        void takeFastPicture(string outFile);
-        void endFastPictures();
-
         // if you want to be notified when a picture is finally done, use this:
         void setPictureCompleteCallback(takePictureCompleteCallback callback);
 
-        // set the function that will be called for each live view frame
+        // set the function that will be called for each live view frame.
+        // when you get a callback you can use liveViewFrameBuffer() to get access to the frames.
         void setLiveViewCallback(liveViewFrameCallback callback);
         void startLiveView();
         void stopLiveView();
@@ -73,6 +70,11 @@ class Camera
         // the return value is the filename of the completed picture
         string popPictureDoneQueue();
         int pictureDoneQueueSize() const;
+
+        // get a pointer to the live view frame data
+        const unsigned char * liveViewFrameBuffer() const;
+        // length in bytes of the live view frame data
+        int liveViewFrameBufferSize() const; 
 
     private: // variables
         static bool s_initialized;
@@ -101,10 +103,12 @@ class Camera
 
             EdsStreamRef m_streamPtr;
             EdsSize m_imageSize;
-            // TODO: Private m_liveViewFrameBuffer as Byte()
-            // TODO: Private m_liveViewBufferHandle as GCHandle
+
+            // the allocated space we have set aside for frame data
+            unsigned char * m_frameBuffer;
 
             LiveView();
+            ~LiveView();
         };
         LiveView m_liveView;
 
@@ -140,7 +144,6 @@ class Camera
         bool m_pendingZoomRatio;
         EdsWhiteBalance m_whiteBalance;
         bool m_pendingWhiteBalance;
-        bool m_fastPictures;
 
         // how many milliseconds to wait before giving up
         static const int c_sleepTimeout;
@@ -150,8 +153,6 @@ class Camera
         // do we make sure that output pictures are jpegs?
         static const bool c_forceJpeg;
 
-        // pictures we need to download but are saving for later
-        queue<TransferItem> m_transferQueue;
         queue<string> m_pictureDoneQueue;
 
         // true if everything is working

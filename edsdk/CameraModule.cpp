@@ -3,38 +3,91 @@
 #include "Camera.h"
 
 extern "C" {
-    static PyObject * ErrorObject;
+    static PyObject * CameraError;
 
     typedef struct {
         PyObject_HEAD
-        PyObject * x_attr; // attributes dictionary
         Camera * camera; // C++ object
     } CameraObject;
 
     static void Camera_dealloc(CameraObject * self);
-    static PyObject * Camera_getattr(CameraObject * self, char * name);
-    static int Camera_setattr(CameraObject * self, char * name, PyObject * v);
-    DL_EXPORT(void) initCamera();
+    static int Camera_getbuffer(CameraObject * self, PyObject * view, int flags);
+    static void Camera_releasebuffer(CameraObject * self, PyObject * view);
+
+    static int Camera_getbuffer(CameraObject * self, PyObject * _view, int flags);
+    static void Camera_releasebuffer(CameraObject * self, PyObject * view);
+    static PyBufferProcs Camera_bufferProcs = {(getbufferproc)Camera_getbuffer, (releasebufferproc)Camera_releasebuffer};
+    
+    static PyObject * Camera_good(CameraObject * self, PyObject * args);
+    static PyObject * Camera_name(CameraObject * self, PyObject * args);
+    static PyObject * Camera_takeSinglePicture(CameraObject * self, PyObject * args);
+    static PyObject * Camera_startLiveView(CameraObject * self, PyObject * args);
+    static PyObject * Camera_stopLiveView(CameraObject * self, PyObject * args);
+    static PyObject * Camera_liveViewImageSize(CameraObject * self, PyObject * args);
+    static PyObject * Camera_zoomPosition(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setZoomPosition(CameraObject * self, PyObject * args);
+    static PyObject * Camera_zoomRatio(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setZoomRatio(CameraObject * self, PyObject * args);
+    static PyObject * Camera_whiteBalance(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setWhiteBalance(CameraObject * self, PyObject * args);
+    static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args);
+    static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
+    static PyMethodDef CameraMethods[] = {
+        {"good",                (PyCFunction)Camera_good,                METH_VARARGS, "Return whether the Camera is working"},
+        {"name",                (PyCFunction)Camera_name,                METH_VARARGS, "Return the model name of the camera"},
+        {"takeSinglePicture",   (PyCFunction)Camera_takeSinglePicture,   METH_VARARGS, "takes one picture to file specified."},
+        {"startLiveView",       (PyCFunction)Camera_startLiveView,       METH_VARARGS, "tells the camera to go into live view mode"},
+        {"stopLiveView",        (PyCFunction)Camera_stopLiveView,        METH_VARARGS, "tells the camera to come out of live view mode"},
+        {"liveViewImageSize",   (PyCFunction)Camera_liveViewImageSize,   METH_VARARGS, "returns (width, height) of the live view image size."
+                                                                                       " only valid after live view has been on."},
+        {"zoomPosition",        (PyCFunction)Camera_zoomPosition,        METH_VARARGS, "returns (x, y) of the zoom position when zoomed in in live view."},
+        {"setZoomPosition",     (PyCFunction)Camera_setZoomPosition,     METH_VARARGS, "sets the zoom position when zoomed in in live view."},
+        {"zoomRatio",           (PyCFunction)Camera_zoomRatio,           METH_VARARGS, "returns the zoom factor."},
+        {"setZoomRatio",        (PyCFunction)Camera_setZoomRatio,        METH_VARARGS, "sets the zoom factor"},
+        {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS, "returns the white balance setting. this is an enum defined in edsdk."},
+        {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS, "sets the while balance setting"},
+        {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
+        {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
+
+        {NULL, NULL, 0, NULL} // sentinel
+    };
+
 
     static PyTypeObject Camera_Type = {
         /* The ob_type field must be initialized in the module init function
          * to be portable to Windows without using C++. */
-        PyObject_HEAD_INIT(NULL)
-        0,          /*ob_size*/
-        "Camera",          /*tp_name*/
-        sizeof(CameraObject),  /*tp_basicsize*/
-        0,          /*tp_itemsize*/
-        /* methods */
-        (destructor)Camera_dealloc, /*tp_dealloc*/
-        0,          /*tp_print*/
-        (getattrfunc)Camera_getattr, /*tp_getattr*/
-        (setattrfunc)Camera_setattr, /*tp_setattr*/
-        0,          /*tp_compare*/
-        0,          /*tp_repr*/
-        0,          /*tp_as_number*/
-        0,          /*tp_as_sequence*/
-        0,          /*tp_as_mapping*/
-        0,          /*tp_hash*/
+        PyVarObject_HEAD_INIT(&PyType_Type, 0)
+        "Camera",                       /*tp_name*/
+        sizeof(CameraObject),           /*tp_basicsize*/
+        0,                              /*tp_itemsize*/
+        // methods to implement standard operations
+        (destructor)Camera_dealloc,     /*tp_dealloc*/
+        0,                              /*tp_print*/
+        0,                              /*tp_getattr*/
+        0,                              /*tp_setattr*/
+        0,                              /*tp_reserved*/
+        0,                              /*tp_repr*/
+        // method suites for standard classes
+        0,                              /*tp_as_number*/
+        0,                              /*tp_as_sequence*/
+        0,                              /*tp_as_mapping*/
+        // more standard operations (here for binary compatibility)
+        0,                              /*tp_hash*/
+        0,                              // tp_call
+        0,                              // tp_str
+        PyObject_GenericGetAttr,        // tp_getattro
+        PyObject_GenericSetAttr,        // tp_setattro
+        // functions to access object as input/output buffer
+        &Camera_bufferProcs,            // tp_as_buffer
+        0,                              // tp_flags
+        "A camera class which you can use to control the actual camera.", // tp_doc
+        0,                              // tp_traverse
+        0,                              // tp_clear
+        0,                              // tp_richcompare
+        0,                              // tp_weaklistoffset
+        0,                              // tp_iter
+        0,                              // tp_iternext
+        CameraMethods,                  // tp_methods
     };
 
 #define CameraObject_Check(v) ((v)->ob_type == &Camera_Type)
@@ -44,7 +97,6 @@ extern "C" {
     static void Camera_dealloc(CameraObject * self)
     {
         delete self->camera;
-        Py_XDECREF(self->x_attr);
         PyObject_FREE(self);
     }
 
@@ -74,37 +126,6 @@ extern "C" {
             return NULL;
 
         self->camera->takeSinglePicture(outFile);
-
-        Py_RETURN_NONE;
-    }
-
-    static PyObject * Camera_beginFastPictures(CameraObject * self, PyObject * args)
-    {
-        if (! PyArg_ParseTuple(args, ""))
-            return NULL;
-
-        self->camera->beginFastPictures();
-
-        Py_RETURN_NONE;
-    }
-
-    static PyObject * Camera_takeFastPicture(CameraObject * self, PyObject * args)
-    {
-        char * outFile;
-        if (! PyArg_ParseTuple(args, "s", &outFile))
-            return NULL;
-
-        self->camera->takeFastPicture(outFile);
-
-        Py_RETURN_NONE;
-    }
-
-    static PyObject * Camera_endFastPictures(CameraObject * self, PyObject * args)
-    {
-        if (! PyArg_ParseTuple(args, ""))
-            return NULL;
-
-        self->camera->endFastPictures();
 
         Py_RETURN_NONE;
     }
@@ -224,58 +245,26 @@ extern "C" {
         return Py_BuildValue("i", count);
     }
 
-    static PyMethodDef Camera_methods[] = {
-        {"good",                (PyCFunction)Camera_good,                METH_VARARGS},
-        {"name",                (PyCFunction)Camera_name,                METH_VARARGS},
-        {"takeSinglePicture",   (PyCFunction)Camera_takeSinglePicture,   METH_VARARGS},
-        {"beginFastPictures",   (PyCFunction)Camera_beginFastPictures,   METH_VARARGS},
-        {"takeFastPicture",     (PyCFunction)Camera_takeFastPicture,     METH_VARARGS},
-        {"endFastPictures",     (PyCFunction)Camera_endFastPictures,     METH_VARARGS},
-        //{"setPictureCompleteCallback", (PyCFunction)Camera_setPictureCompleteCallback, METH_VARARGS},
-        //{"setLiveViewCallback", (PyCFunction)Camera_setLiveViewCallback, METH_VARARGS},
-        {"startLiveView",       (PyCFunction)Camera_startLiveView,       METH_VARARGS},
-        {"stopLiveView",        (PyCFunction)Camera_stopLiveView,        METH_VARARGS},
-        {"liveViewImageSize",   (PyCFunction)Camera_liveViewImageSize,   METH_VARARGS},
-        {"zoomPosition",        (PyCFunction)Camera_zoomPosition,        METH_VARARGS},
-        {"setZoomPosition",     (PyCFunction)Camera_setZoomPosition,     METH_VARARGS},
-        {"zoomRatio",           (PyCFunction)Camera_zoomRatio,           METH_VARARGS},
-        {"setZoomRatio",        (PyCFunction)Camera_setZoomRatio,        METH_VARARGS},
-        {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS},
-        {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS},
-        {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS},
-        {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS},
-
-        {NULL, NULL} // sentinel
-    };
-
-    static PyObject * Camera_getattr(CameraObject * self, char * name)
+    static int Camera_getbuffer(CameraObject * self, PyObject * _view, int flags)
     {
-        if (self->x_attr != NULL) {
-            PyObject * v = PyDict_GetItemString(self->x_attr, name);
-            if (v != NULL) {
-                Py_INCREF(v);
-                return v;
-            }
-        }
-        return Py_FindMethod(Camera_methods, (PyObject *)self, name);
+        Py_buffer * view = (Py_buffer *) _view;
+        view->buf = (void *) self->camera->liveViewFrameBuffer();
+        view->len = self->camera->liveViewFrameBufferSize();
+        view->readonly = 1;
+        view->format = NULL;
+        view->ndim = 0;
+        view->shape = 0;
+        view->strides = 0;
+        view->suboffsets = 0;
+        view->itemsize = 0;
+
+        // wtf do we return?
+        return 0;
     }
 
-    static int Camera_setattr(CameraObject * self, char * name, PyObject * v)
+    static void Camera_releasebuffer(CameraObject * self, PyObject * view)
     {
-        if (self->x_attr == NULL) {
-            self->x_attr = PyDict_New();
-            if (self->x_attr == NULL)
-                return -1;
-        }
-        if (v == NULL) {
-            int rv = PyDict_DelItemString(self->x_attr, name);
-            if (rv < 0)
-                PyErr_SetString(PyExc_AttributeError,
-                        "delete non-existing Camera attribute");
-            return rv;
-        }
-        else
-            return PyDict_SetItemString(self->x_attr, name, v);
+        // nothing to do
     }
     /* --------------------------------------------------------------------- */
 
@@ -284,38 +273,55 @@ extern "C" {
     {
         CameraObject * self;
         self = PyObject_NEW(CameraObject, &Camera_Type);
-        if ( self == NULL )
+        if (self == NULL)
             return NULL;
 
-        self->x_attr = NULL;
         self->camera = Camera::getFirstCamera();
+
+        if (self->camera == NULL) {
+            // raise python error
+            Camera_dealloc(self);
+            PyErr_SetString(CameraError, "Unable to connect to camera.");
+            return NULL;
+        }
 
         return (PyObject *) self;
     }
 
     /* List of functions defined in the module */
-    static PyMethodDef camera_methods[] = {
-        {"getFirstCamera", camera_getFirstCamera, METH_VARARGS},
-        {NULL, NULL}       /* sentinel */
+    static PyMethodDef cameraMethods[] = {
+        {"getFirstCamera", camera_getFirstCamera, METH_VARARGS, "return a Camera object using the first camera we can find"},
+
+        {NULL, NULL, 0, NULL}       // sentinel
     };
 
+    static PyModuleDef cameraModule = {
+        PyModuleDef_HEAD_INIT,
+        "Camera",                                      // name of module
+        "Python library to control cameras via EDSDK", // module documentation
+        // size of per-interpreter state of the module, or -1 if
+        // the module keeps state in global variables.
+        -1,
+        cameraMethods
+    };
 
-    /* Initialization function for the module (*must* be called initcamera) */
-    DL_EXPORT(void) initCamera()
+    // initialization function for the module.
+    // the name that gets exported here matters.
+    PyMODINIT_FUNC
+    PyInit_Camera()
     {
-        PyObject *m, *d;
+        PyObject * m;
 
-        /* Initialize the type of the new type object here; doing it here
-         * is required for portability to Windows without requiring C++. */
-        Camera_Type.ob_type = &PyType_Type;
+        m = PyModule_Create(&cameraModule);
+        if (m == NULL)
+            return NULL;
 
-        /* Create the module and add the functions */
-        m = Py_InitModule("Camera", camera_methods);
+        // create the custom error
+        CameraError = PyErr_NewException("Camera.error", NULL, NULL);
+        Py_INCREF(CameraError);
+        PyModule_AddObject(m, "error", CameraError);
 
-        /* Add some symbolic constants to the module */
-        d = PyModule_GetDict(m);
-        ErrorObject = PyErr_NewException("camera.error", NULL, NULL);
-        PyDict_SetItemString(d, "error", ErrorObject);
+        return m;
     }
 }
 
