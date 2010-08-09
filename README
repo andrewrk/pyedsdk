@@ -1,19 +1,24 @@
-Python library to control cameras via EDSDK
+Python library to control Canon cameras via EDSDK in Windows.
 
 Sample usage:
 
     import edsdk
-
     cam = edsdk.getFirstCamera()
-    
     cam.takeSinglePicture(filename)
 
 To install the python module in windows:
 
-    python setup.py build -c mingw32
-    python setup.py install
+    install python 3.1 32bit (can't be 64bit)
+    install MinGW (with g++)
+    install Python for Windows Extesions for python 3.1 32bit
+    get EDSDK
+    copy $(EDSDK_ROOT)/Library/EDSDK.lib to $(MINGW_ROOT)/lib
+    execute the following in this dir (where "python" is the python you installed above):
+        python setup.py build -c mingw32
+        python setup.py install
+    copy $(EDSDK_ROOT)/Dll/*.dll to the cwd where you execute from
 
-To compile the test program in windows:
+To compile the test C++ program in windows:
 
     g++ -o test.exe test.cpp edsdk/Camera.cpp edsdk/Utils.cpp edsdk/Filesystem.cpp -lEDSDK -lole32
 
