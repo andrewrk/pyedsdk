@@ -25,7 +25,7 @@ setup(
     author_email="superjoe30@gmail.com",
     url="http://github.com/superjoe30/pyedsdk",
     description='Python library to control Canon cameras via EDSDK',
-    license="GPL",
+    license="LGPL",
     ext_modules=[camera],
     packages=["edsdk"],
 )
