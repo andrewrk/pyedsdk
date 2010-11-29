@@ -1,7 +1,7 @@
 from . import Camera as CppCamera
 import threading, time
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 class Camera:
     def _checkPictureQueue(self):
