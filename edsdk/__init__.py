@@ -109,3 +109,30 @@ class Camera:
 
 def getFirstCamera():
     return Camera(CppCamera.getFirstCamera())
+
+def getFakeCamera(placeHolderImagePath):
+    class FakeCamera:
+        def __init__(self):
+            self._pictureCompleteCallback = None
+            handle = open(placeHolderImagePath, "rb")
+            try:
+                self._liveViewImageBytes = handle.read()
+            finally:
+                handle.close()
+        def setPictureCompleteCallback(self, callback):
+            self._pictureCompleteCallback = callback
+        def startLiveView(self):
+            pass
+        def liveViewMemoryView(self):
+            return memoryview(self._liveViewImageBytes)
+        def grabLiveViewFrame(self):
+            pass
+        def takePicture(self, filepath):
+            handle = open(filepath, "wb")
+            try:
+                handle.write(self._liveViewImageBytes)
+            finally:
+                handle.close()
+            self._pictureCompleteCallback(filepath)
+    return FakeCamera()
+
