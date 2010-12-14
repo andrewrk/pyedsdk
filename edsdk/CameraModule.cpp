@@ -277,7 +277,7 @@ extern "C" {
     static PyObject * Camera_setAutoFocusOn(CameraObject * self, PyObject * args)
     {
         bool autoFocusOn;
-        if (! PyArg_ParseTuple(args, "b", &zoomRatio))
+        if (! PyArg_ParseTuple(args, "b", &autoFocusOn))
             return NULL;
 
         self->camera->setAutoFocusOn(autoFocusOn);
