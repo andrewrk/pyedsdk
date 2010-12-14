@@ -107,11 +107,11 @@ class Camera:
     def setWhiteBalance(self, white_balance):
         return self._camera.setWhiteBalance(white_balance)
 
-    def autoFocusOn(self):
-        return self._camera.autoFocusOn()
+    def autoFocus(self):
+        return self._camera.autoFocus()
 
-    def setAutoFocusOn(self, on):
-        return self._camera.setAutoFocusOn(on)
+    def pressShutterHalfway(self):
+        return self._camera.pressShutterHalfway()
 
 def getFirstCamera():
     return Camera(CppCamera.getFirstCamera())

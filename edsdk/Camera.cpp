@@ -106,8 +106,7 @@ Camera::Camera(EdsCameraRef cam) :
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
     m_good(false),
-    m_pictureCompleteCallback(NULL),
-    m_autoFocusOn(false)
+    m_pictureCompleteCallback(NULL)
 {
     // call static initializer
     initialize();
@@ -554,15 +553,12 @@ EdsSize Camera::liveViewImageSize() const
     return m_liveView.m_imageSize;
 }
 
-void Camera::setAutoFocusOn(bool on)
+void Camera::autoFocus()
 {
-    EdsUInt32 value = on ? Evf_AFMode_Live : Evf_AFMode_Quick;
-    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, value);
-    m_autoFocusOn = on;
+    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
 }
 
-bool Camera::autoFocusOn() const
+void Camera::pressShutterHalfway()
 {
-    return m_autoFocusOn;
+    EdsSendCommand(m_cam, kEdsCameraCommand_PressShutterButton, (EdsUInt32) kEdsCameraCommand_ShutterButton_Halfway);
 }
-

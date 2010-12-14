@@ -75,9 +75,10 @@ class Camera
         // length in bytes of the live view frame data
         int liveViewFrameBufferSize() const; 
 
-        // turn on or off auto focus during live view
-        void setAutoFocusOn(bool value);
-        bool autoFocusOn() const;
+        // perform auto focus once right now
+        void autoFocus();
+
+        void pressShutterHalfway();
 
     private: // variables
         static bool s_initialized;
@@ -163,7 +164,6 @@ class Camera
 
         takePictureCompleteCallback m_pictureCompleteCallback;
 
-        bool m_autoFocusOn;
     private: // methods
         static void initialize();
 
