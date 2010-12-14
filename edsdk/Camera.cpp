@@ -106,7 +106,8 @@ Camera::Camera(EdsCameraRef cam) :
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
     m_good(false),
-    m_pictureCompleteCallback(NULL)
+    m_pictureCompleteCallback(NULL),
+    m_autoFocusOn(false)
 {
     // call static initializer
     initialize();
@@ -551,5 +552,17 @@ void Camera::stopLiveView()
 EdsSize Camera::liveViewImageSize() const
 {
     return m_liveView.m_imageSize;
+}
+
+void Camera::setAutoFocusOn(bool on)
+{
+    EdsUInt32 value = on ? Evf_AFMode_Live : Evf_AFMode_Quick;
+    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, value);
+    m_autoFocusOn = on;
+}
+
+bool Camera::autoFocusOn() const
+{
+    return m_autoFocusOn;
 }
 
