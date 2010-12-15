@@ -555,12 +555,17 @@ EdsSize Camera::liveViewImageSize() const
 
 void Camera::autoFocus()
 {
-    EdsUInt32 off = kEdsEvfDepthOfFieldPreview_OFF;
-    EdsUInt32 on = kEdsEvfDepthOfFieldPreview_ON;
+    EdsUInt32 off = (EdsUInt32) kEdsEvfDepthOfFieldPreview_OFF;
+    EdsUInt32 on = (EdsUInt32) kEdsEvfDepthOfFieldPreview_ON;
 
-    // turn OFF
-    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_OFF), &off);
-    // turn ON
-    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_ON), &on);
+    EdsError err = EDS_ERR_OK;
+    // turn OFF depth of field preview
+    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
+
+    err = err || EdsSendCommand(kEdsCameraCommand_DoEvfAf, Evf_AFMode_Quick);
+    err = err || EdsSendCommand(kEdsCameraCommand_DoEvfAf, Evf_AFMode_Live);
+
+    if (err)
+        fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
 }
 
