@@ -559,8 +559,8 @@ EdsSize Camera::liveViewImageSize() const
 void Camera::autoFocus()
 {
     // turn OFF
-    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_OFF), kEdsEvfDepthOfFieldPreview_OFF);
+    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_OFF), &kEdsEvfDepthOfFieldPreview_OFF);
     // turn ON
-    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_ON), kEdsEvfDepthOfFieldPreview_ON);
+    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_ON), &kEdsEvfDepthOfFieldPreview_ON);
 }
 
