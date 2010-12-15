@@ -117,9 +117,6 @@ Camera::Camera(EdsCameraRef cam) :
     m_pendingZoomPoint.y = 0;
 
     establishSession();
-
-    // make it so we can auto focus in live view
-    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
 }
 
 Camera::~Camera()
