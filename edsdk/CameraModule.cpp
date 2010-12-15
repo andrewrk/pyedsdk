@@ -35,7 +35,6 @@ extern "C" {
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
     static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
     static PyObject * Camera_autoFocus(CameraObject * self, PyObject * args);
-    static PyObject * Camera_pressShutterHalfway(CameraObject * self, PyObject * args);
     static PyMethodDef CameraMethods[] = {
         {"good",                (PyCFunction)Camera_good,                METH_VARARGS, "Return whether the Camera is working"},
         {"name",                (PyCFunction)Camera_name,                METH_VARARGS, "Return the model name of the camera"},
@@ -55,7 +54,6 @@ extern "C" {
         {"grabLiveViewFrame",   (PyCFunction)Camera_grabLiveViewFrame,   METH_VARARGS, "refresh the frame buffer with a new frame from the camera."},
 
         {"autoFocus",           (PyCFunction)Camera_autoFocus,           METH_VARARGS, "performs an auto focus once right now"},
-        {"pressShutterHalfway", (PyCFunction)Camera_pressShutterHalfway, METH_VARARGS, "presses the shutter button halfway once right now"},
 
         {NULL, NULL, 0, NULL} // sentinel
     };
@@ -272,17 +270,6 @@ extern "C" {
 
         Py_RETURN_NONE;
     }
-
-    static PyObject * Camera_pressShutterHalfway(CameraObject * self, PyObject * args)
-    {
-        if (! PyArg_ParseTuple(args, ""))
-            return NULL;
-
-        self->camera->pressShutterHalfway();
-
-        Py_RETURN_NONE;
-    }
-
 
     // -----
 

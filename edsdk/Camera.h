@@ -78,8 +78,6 @@ class Camera
         // perform auto focus once right now
         void autoFocus();
 
-        void pressShutterHalfway();
-
     private: // variables
         static bool s_initialized;
 
@@ -193,6 +191,7 @@ class Camera
 
         void pauseLiveView();
         void resumeLiveView();
+
 
 };
 

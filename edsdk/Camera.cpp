@@ -76,6 +76,7 @@ void Camera::initialize()
     s_modelData[c_cameraName_7D] = data7D;
 
     EdsInitializeSDK();
+    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
 }
 
 Camera::LiveView::LiveView() :
@@ -555,10 +556,9 @@ EdsSize Camera::liveViewImageSize() const
 
 void Camera::autoFocus()
 {
-    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
+    // turn OFF
+    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_OFF), kEdsEvfDepthOfFieldPreview_OFF);
+    // turn ON
+    EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(kEdsEvfDepthOfFieldPreview_ON), kEdsEvfDepthOfFieldPreview_ON);
 }
 
-void Camera::pressShutterHalfway()
-{
-    EdsSendCommand(m_cam, kEdsCameraCommand_PressShutterButton, (EdsUInt32) kEdsCameraCommand_ShutterButton_Halfway);
-}
