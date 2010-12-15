@@ -562,8 +562,8 @@ void Camera::autoFocus()
     // turn OFF depth of field preview
     err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
 
-    err = err || EdsSendCommand((EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
-    err = err || EdsSendCommand((EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
+    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
+    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
 
     if (err)
         fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
