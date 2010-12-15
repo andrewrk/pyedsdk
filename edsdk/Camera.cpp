@@ -76,7 +76,6 @@ void Camera::initialize()
     s_modelData[c_cameraName_7D] = data7D;
 
     EdsInitializeSDK();
-    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
 }
 
 Camera::LiveView::LiveView() :
@@ -90,6 +89,9 @@ Camera::LiveView::LiveView() :
     m_frameBuffer = new unsigned char[c_frameBufferSize];
     EdsError err = EDS_ERR_OK;
     err = err || EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
+
+    // make it so we can auto focus in live view
+    EdsSendCommand(m_cam, kEdsCameraCommand_DoEvfAf, (EdsUInt32) Evf_AFMode_Live);
 }
 
 Camera::LiveView::~LiveView()
