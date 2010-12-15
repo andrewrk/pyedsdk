@@ -557,10 +557,18 @@ void Camera::autoFocus()
 {
     EdsUInt32 off = (EdsUInt32) kEdsEvfDepthOfFieldPreview_OFF;
     EdsUInt32 on = (EdsUInt32) kEdsEvfDepthOfFieldPreview_ON;
-
     EdsError err = EDS_ERR_OK;
-    // turn OFF depth of field preview
-    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
+
+    EdsUInt32 currentDepth;
+    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &currentDepth);
+    if (err) {
+        fprintf(stderr, "ERROR: Unable to get depth of field preview: %u\n", err);
+        return;
+    }
+    if (currentDepth != kEdsEvfDepthOfFieldPreview_OFF) {
+        // turn OFF depth of field preview
+        err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
+    }
 
     err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
     err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
