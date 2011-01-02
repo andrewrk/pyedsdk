@@ -29,6 +29,9 @@ class Camera
         // you are responsible for deleting it when you're done
         static Camera * getFirstCamera();
 
+        // use if you want to start over
+        static void terminate();
+
         // true if everything is ok
         bool good() const;
 

@@ -1,7 +1,7 @@
 from . import Camera as CppCamera
 import threading, time
 
-__version__ = '0.2'
+__version__ = '0.3'
 
 class Camera:
     def _checkPictureQueue(self):
@@ -142,3 +142,5 @@ def getFakeCamera(placeHolderImagePath):
             self._pictureCompleteCallback(filepath)
     return FakeCamera()
 
+def terminate():
+    CppCamera.terminate()

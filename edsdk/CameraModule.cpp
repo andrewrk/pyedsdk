@@ -323,9 +323,21 @@ extern "C" {
         return (PyObject *) self;
     }
 
+    static PyObject * camera_terminate(PyObject * , PyObject * args)
+    {
+
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+        
+        Camera::terminate();
+
+        Py_RETURN_NONE;
+    }
+
     /* List of functions defined in the module */
     static PyMethodDef cameraMethods[] = {
         {"getFirstCamera", camera_getFirstCamera, METH_VARARGS, "return a Camera object using the first camera we can find"},
+        {"terminate", camera_terminate, METH_VARARGS, "call EdsTerminateSDK and start over"},
 
         {NULL, NULL, 0, NULL}       // sentinel
     };

@@ -556,7 +556,6 @@ EdsSize Camera::liveViewImageSize() const
 void Camera::autoFocus()
 {
     EdsUInt32 off = (EdsUInt32) kEdsEvfDepthOfFieldPreview_OFF;
-    EdsUInt32 on = (EdsUInt32) kEdsEvfDepthOfFieldPreview_ON;
     EdsError err = EDS_ERR_OK;
 
     EdsUInt32 currentDepth;
@@ -577,3 +576,7 @@ void Camera::autoFocus()
         fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
 }
 
+void Camera::terminate()
+{
+    EdsTerminateSDK();
+}
