@@ -249,6 +249,171 @@ void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     switch (inPropertyID) {
+		case kEdsPropID_Unknown:
+            fprintf(stderr, "Incoming property event: Unknown\n");
+            break;
+		case kEdsPropID_ProductName:
+            fprintf(stderr, "Incoming property event: ProductName\n");
+            break;
+		case kEdsPropID_BodyID:
+            fprintf(stderr, "Incoming property event: BodyID\n");
+            break;
+		case kEdsPropID_OwnerName:
+            fprintf(stderr, "Incoming property event: OwnerName\n");
+            break;
+		case kEdsPropID_MakerName:
+            fprintf(stderr, "Incoming property event: MakerName\n");
+            break;
+		case kEdsPropID_DateTime:
+            fprintf(stderr, "Incoming property event: DateTime\n");
+            break;
+		case kEdsPropID_FirmwareVersion:
+            fprintf(stderr, "Incoming property event: FirmwareVersion\n");
+            break;
+		case kEdsPropID_BatteryLevel:
+            fprintf(stderr, "Incoming property event: BatteryLevel\n");
+            break;
+		case kEdsPropID_CFn:
+            fprintf(stderr, "Incoming property event: CFn\n");
+            break;
+		case kEdsPropID_SaveTo:
+            fprintf(stderr, "Incoming property event: SaveTo\n");
+            break;
+		case kEdsPropID_CurrentStorage:
+            fprintf(stderr, "Incoming property event: CurrentStorage\n");
+            break;
+		case kEdsPropID_CurrentFolder:
+            fprintf(stderr, "Incoming property event: CurrentFolder\n");
+            break;
+		case kEdsPropID_MyMenu:
+            fprintf(stderr, "Incoming property event: MyMenu\n");
+            break;
+		case kEdsPropID_BatteryQuality:
+            fprintf(stderr, "Incoming property event: BatteryQuality\n");
+            break;
+		case kEdsPropID_HDDirectoryStructure:
+            fprintf(stderr, "Incoming property event: HDDirectoryStructure\n");
+            break;
+		case kEdsPropID_ImageQuality:
+            fprintf(stderr, "Incoming property event: ImageQuality\n");
+            break;
+		case kEdsPropID_JpegQuality:
+            fprintf(stderr, "Incoming property event: JpegQuality\n");
+            break;
+		case kEdsPropID_Orientation:
+            fprintf(stderr, "Incoming property event: Orientation\n");
+            break;
+		case kEdsPropID_ICCProfile:
+            fprintf(stderr, "Incoming property event: ICCProfile\n");
+            break;
+		case kEdsPropID_FocusInfo:
+            fprintf(stderr, "Incoming property event: FocusInfo\n");
+            break;
+		case kEdsPropID_DigitalExposure:
+            fprintf(stderr, "Incoming property event: DigitalExposure\n");
+            break;
+		case kEdsPropID_WhiteBalance:
+            fprintf(stderr, "Incoming property event: WhiteBalance\n");
+            break;
+		case kEdsPropID_ColorTemperature:
+            fprintf(stderr, "Incoming property event: ColorTemperature\n");
+            break;
+		case kEdsPropID_WhiteBalanceShift:
+            fprintf(stderr, "Incoming property event: WhiteBalanceShift\n");
+            break;
+		case kEdsPropID_Contrast:
+            fprintf(stderr, "Incoming property event: Contrast\n");
+            break;
+		case kEdsPropID_ColorSaturation:
+            fprintf(stderr, "Incoming property event: ColorSaturation\n");
+            break;
+		case kEdsPropID_ColorTone:
+            fprintf(stderr, "Incoming property event: ColorTone\n");
+            break;
+		case kEdsPropID_Sharpness:
+            fprintf(stderr, "Incoming property event: Sharpness\n");
+            break;
+		case kEdsPropID_ColorSpace:
+            fprintf(stderr, "Incoming property event: ColorSpace\n");
+            break;
+		case kEdsPropID_ToneCurve:
+            fprintf(stderr, "Incoming property event: ToneCurve\n");
+            break;
+		case kEdsPropID_PhotoEffect:
+            fprintf(stderr, "Incoming property event: PhotoEffect\n");
+            break;
+		case kEdsPropID_FilterEffect:
+            fprintf(stderr, "Incoming property event: FilterEffect\n");
+            break;
+		case kEdsPropID_ToningEffect:
+            fprintf(stderr, "Incoming property event: ToningEffect\n");
+            break;
+		case kEdsPropID_ParameterSet:
+            fprintf(stderr, "Incoming property event: ParameterSet\n");
+            break;
+		case kEdsPropID_ColorMatrix:
+            fprintf(stderr, "Incoming property event: ColorMatrix\n");
+            break;
+		case kEdsPropID_PictureStyle:
+            fprintf(stderr, "Incoming property event: PictureStyle\n");
+            break;
+		case kEdsPropID_PictureStyleDesc:
+            fprintf(stderr, "Incoming property event: PictureStyleDesc\n");
+            break;
+		case kEdsPropID_ETTL2Mode:
+            fprintf(stderr, "Incoming property event: ETTL2Mode\n");
+            break;
+		case kEdsPropID_PictureStyleCaption:
+            fprintf(stderr, "Incoming property event: PictureStyleCaption\n");
+            break;
+		case kEdsPropID_Linear:
+            fprintf(stderr, "Incoming property event: Linear\n");
+            break;
+		case kEdsPropID_ClickWBPoint:
+            fprintf(stderr, "Incoming property event: ClickWBPoint\n");
+            break;
+		case kEdsPropID_WBCoeffs:
+            fprintf(stderr, "Incoming property event: WBCoeffs\n");
+            break;
+		case kEdsPropID_GPSVersionID:
+            fprintf(stderr, "Incoming property event: GPSVersionID\n");
+            break;
+		case    kEdsPropID_GPSLatitudeRef:
+            fprintf(stderr, "Incoming property event: GPSLatitudeRef\n");
+            break;
+		case    kEdsPropID_GPSLatitude:
+            fprintf(stderr, "Incoming property event: GPSLatitude\n");
+            break;
+		case    kEdsPropID_GPSLongitudeRef:
+            fprintf(stderr, "Incoming property event: GPSLongitudeRef\n");
+            break;
+		case    kEdsPropID_GPSLongitude:
+            fprintf(stderr, "Incoming property event: GPSLongitude\n");
+            break;
+		case    kEdsPropID_GPSAltitudeRef:
+            fprintf(stderr, "Incoming property event: GPSAltitudeRef\n");
+            break;
+		case    kEdsPropID_GPSAltitude:
+            fprintf(stderr, "Incoming property event: GPSAltitude\n");
+            break;
+		case    kEdsPropID_GPSTimeStamp:
+            fprintf(stderr, "Incoming property event: GPSTimeStamp\n");
+            break;
+		case    kEdsPropID_GPSSatellites:
+            fprintf(stderr, "Incoming property event: GPSSatellites\n");
+            break;
+		case    kEdsPropID_GPSStatus:
+            fprintf(stderr, "Incoming property event: GPSStatus\n");
+            break;
+		case    kEdsPropID_GPSMapDatum:
+            fprintf(stderr, "Incoming property event: GPSMapDatum\n");
+            break;
+		case    kEdsPropID_GPSDateStamp:
+            fprintf(stderr, "Incoming property event: GPSDateStamp\n");
+            break;
+		case kEdsPropID_AtCapture_Flag:
+            fprintf(stderr, "Incoming property event: AtCapture_Flag\n");
+            break;
 		case kEdsPropID_AEMode:
             fprintf(stderr, "Incoming property event: AEMode\n");
             break;
