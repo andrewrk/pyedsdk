@@ -10,7 +10,6 @@ using namespace std;
 #include "EDSDKErrors.h"
 #include "EDSDKTypes.h"
 
-
 class Camera
 {
     public: // variables
@@ -48,7 +47,7 @@ class Camera
         // you have to put the camera in "live view mode" before you can get live view frames.
         void startLiveView();
         void stopLiveView();
-        // this function refreshes the frame buffe with a new image from the camera.
+        // this function refreshes the frame buffer with a new image from the camera.
         void grabLiveViewFrame();
 
         // size of the frames coming through live view. only valid once
@@ -86,7 +85,6 @@ class Camera
 
         class LiveView {
             public:
-            // TODO: Private m_liveViewThread as Thread
             static const int c_delay;
             static const int c_frameBufferSize;
             

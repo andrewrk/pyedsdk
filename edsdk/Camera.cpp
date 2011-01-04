@@ -248,15 +248,130 @@ void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 
 void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
-    if (inPropertyID == kEdsPropID_Evf_OutputDevice) {
-        // TODO: actually check the property value instead of assuming it's going to do what we want.
-        if (m_liveView.m_state == LiveView::WaitingToStart) {
-            m_liveView.m_state = LiveView::On;
-        } else if (m_liveView.m_state == LiveView::WaitingToStop) {
-            m_liveView.m_state = LiveView::Off;
-        }
-    } else {
-        fprintf(stderr, "DEBUG: propertyEventHandler: propid %u\n", inPropertyID);
+    switch (inPropertyID) {
+		case kEdsPropID_AEMode:
+            fprintf(stderr, "Incoming property event: AEMode\n");
+            break;
+		case kEdsPropID_DriveMode:
+            fprintf(stderr, "Incoming property event: DriveMode\n");
+            break;
+		case kEdsPropID_ISOSpeed:
+            fprintf(stderr, "Incoming property event: ISOSpeed\n");
+            break;
+		case kEdsPropID_MeteringMode:
+            fprintf(stderr, "Incoming property event: MeteringMode\n");
+            break;
+		case kEdsPropID_AFMode:
+            fprintf(stderr, "Incoming property event: AFMode\n");
+            break;
+		case kEdsPropID_Av:
+            fprintf(stderr, "Incoming property event: Av\n");
+            break;
+		case kEdsPropID_Tv:
+            fprintf(stderr, "Incoming property event: Tv\n");
+            break;
+		case kEdsPropID_ExposureCompensation:
+            fprintf(stderr, "Incoming property event: ExposureCompensation\n");
+            break;
+		case kEdsPropID_FlashCompensation:
+            fprintf(stderr, "Incoming property event: FlashCompensation\n");
+            break;
+		case kEdsPropID_FocalLength:
+            fprintf(stderr, "Incoming property event: FocalLength\n");
+            break;
+		case kEdsPropID_AvailableShots:
+            fprintf(stderr, "Incoming property event: AvailableShots\n");
+            break;
+		case kEdsPropID_Bracket:
+            fprintf(stderr, "Incoming property event: Bracket\n");
+            break;
+		case kEdsPropID_WhiteBalanceBracket:
+            fprintf(stderr, "Incoming property event: WhiteBalancingBracket\n");
+            break;
+		case kEdsPropID_LensName:
+            fprintf(stderr, "Incoming property event: LensName\n");
+            break;
+		case kEdsPropID_AEBracket:
+            fprintf(stderr, "Incoming property event: AEBracket\n");
+            break;
+		case kEdsPropID_FEBracket:
+            fprintf(stderr, "Incoming property event: FEBracket\n");
+            break;
+		case kEdsPropID_ISOBracket:
+            fprintf(stderr, "Incoming property event: ISOBracket\n");
+            break;
+		case kEdsPropID_NoiseReduction:
+            fprintf(stderr, "Incoming property event: NoiseReduction\n");
+            break;
+		case kEdsPropID_FlashOn:
+            fprintf(stderr, "Incoming property event: FlashOn\n");
+            break;
+		case kEdsPropID_RedEye:
+            fprintf(stderr, "Incoming property event: RedEye\n");
+            break;
+		case kEdsPropID_FlashMode:
+            fprintf(stderr, "Incoming property event: FlashMode\n");
+            break;
+		case kEdsPropID_LensStatus:
+            fprintf(stderr, "Incoming property event: LensStatus\n");
+            break;
+		case kEdsPropID_Artist:
+            fprintf(stderr, "Incoming property event: Artist\n");
+            break;
+		case kEdsPropID_Copyright:
+            fprintf(stderr, "Incoming property event: Copyright\n");
+            break;
+		case kEdsPropID_DepthOfField:
+            fprintf(stderr, "Incoming property event: DepthOfField\n");
+            break;
+		case kEdsPropID_EFCompensation:
+            fprintf(stderr, "Incoming property event: EFCompensation\n");
+            break;
+
+		case kEdsPropID_Evf_OutputDevice:
+            // TODO: actually check the property value instead of assuming it's going to do what we want.
+            if (m_liveView.m_state == LiveView::WaitingToStart) {
+                m_liveView.m_state = LiveView::On;
+            } else if (m_liveView.m_state == LiveView::WaitingToStop) {
+                m_liveView.m_state = LiveView::Off;
+            }
+            break;
+		case kEdsPropID_Evf_Mode:
+            fprintf(stderr, "Incoming property event: EvfMode\n");
+            break;
+		case kEdsPropID_Evf_WhiteBalance:
+            fprintf(stderr, "Incoming property event: WhiteBalance\n");
+            break;
+		case kEdsPropID_Evf_ColorTemperature:
+            fprintf(stderr, "Incoming property event: ColorTemperature\n");
+            break;
+		case kEdsPropID_Evf_DepthOfFieldPreview:
+            fprintf(stderr, "Incoming property event: DepthOfFieldPreview\n");
+            break;
+		case kEdsPropID_Evf_Zoom:
+            fprintf(stderr, "Incoming property event: Zoom\n");
+            break;
+		case kEdsPropID_Evf_ZoomPosition:
+            fprintf(stderr, "Incoming property event: ZoomPosition\n");
+            break;
+		case kEdsPropID_Evf_FocusAid:
+            fprintf(stderr, "Incoming property event: FocusAid\n");
+            break;
+		case kEdsPropID_Evf_Histogram:
+            fprintf(stderr, "Incoming property event: Histogram\n");
+            break;
+		case kEdsPropID_Evf_ImagePosition:
+            fprintf(stderr, "Incoming property event: ImagePosition\n");
+            break;
+		case kEdsPropID_Evf_HistogramStatus:
+            fprintf(stderr, "Incoming property event: HistogramStatus\n");
+            break;
+		case kEdsPropID_Evf_AFMode:
+            fprintf(stderr, "Incoming property event: AFMode\n");
+            break;
+        default:
+            fprintf(stderr, "Unrecognized prop id: %u\n", inPropertyID);
+            assert(false);
     }
 }
 
@@ -567,13 +682,24 @@ void Camera::autoFocus()
     if (currentDepth != kEdsEvfDepthOfFieldPreview_OFF) {
         // turn OFF depth of field preview
         err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
+
+        if (err) {
+            fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
+            return;
+        }
     }
 
     err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
-    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
+    if (err) {
+        fprintf(stderr, "ERROR: Unable to set camera to AF mode quick: %u\n", err);
+        return;
+    }
 
-    if (err)
-        fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
+    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
+    if (err) {
+        fprintf(stderr, "ERROR: Unable to set camera to AF mode live: %u\n", err);
+        return;
+    }
 }
 
 void Camera::terminate()
