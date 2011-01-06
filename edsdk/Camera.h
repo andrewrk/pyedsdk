@@ -214,6 +214,11 @@ class Camera
 
         static void pushErrMsg(ErrorLevel level = Error);
 
+        bool _startLiveView();
+        bool _stopLiveView();
+
+        void handleCameraIsReady();
+
     friend class LiveView;
 };
 

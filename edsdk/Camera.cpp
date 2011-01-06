@@ -689,50 +689,7 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
                 *s_err << "bogus notice from camera: live view now in WTF mode: " << inParam;
                 pushErrMsg(Warning);
             }
-            switch (m_liveView->m_state) {
-                case LiveView::Off:
-                    *s_err << "live view changed but we didn't expect it to. live view should be off";
-                    pushErrMsg(Warning);
-                    break;
-                case LiveView::On:
-                    *s_err << "live view changed but we didn't expect it to. live view should be on";
-                    pushErrMsg(Warning);
-                    break;
-                case LiveView::Paused:
-                    *s_err << "live view changed but we didn't expect it to. live view should be paused";
-                    pushErrMsg(Warning);
-                    break;
-                case LiveView::WaitingToStart:
-                    m_liveView->m_state = LiveView::On;
-                    switch (m_liveView->m_desiredNewState) {
-                        case LiveView::Off:
-                            stopLiveView();
-                            break;
-                        case LiveView::On:
-                            break;
-                        case LiveView::Paused:
-                            pauseLiveView();
-                            break;
-                        default:
-                            assert(false);
-                    }
-                    break;
-                case LiveView::WaitingToStop:
-                    m_liveView->m_state = LiveView::Off;
-                    switch (m_liveView->m_desiredNewState) {
-                        case LiveView::Off:
-                            break;
-                        case LiveView::On:
-                            startLiveView();
-                            break;
-                        case LiveView::Paused:
-                            m_liveView->m_state = LiveView::Paused;
-                            break;
-                        default:
-                            assert(false);
-                    }
-                    break;
-            }
+            handleCameraIsReady();
             break;
 		case kEdsPropID_Evf_Mode:
             *s_err << "Incoming property event: EvfMode";
@@ -853,6 +810,7 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     moveFile(tmpfile, outfile);
 
     resumeLiveView();
+    handleCameraIsReady();
 
     if (m_pictureCompleteCallback)
         m_pictureCompleteCallback(outfile);
@@ -860,6 +818,54 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     m_pictureDoneQueue.push(outfile);
 
     return true;
+}
+
+void Camera::handleCameraIsReady()
+{
+    switch (m_liveView->m_state) {
+        case LiveView::On:
+        case LiveView::Off:
+        case LiveView::Paused:
+            break;
+        case LiveView::WaitingToStart:
+            m_liveView->m_state = LiveView::On;
+            switch (m_liveView->m_desiredNewState) {
+                case LiveView::Off:
+                    stopLiveView();
+                    break;
+                case LiveView::On:
+                    break;
+                case LiveView::Paused:
+                    pauseLiveView();
+                    break;
+                default:
+                    assert(false);
+            }
+            break;
+        case LiveView::WaitingToStop:
+            *s_err << "Finished stopping live view. Let's decide what to do.";
+            pushErrMsg(Debug);
+            m_liveView->m_state = LiveView::Off;
+            switch (m_liveView->m_desiredNewState) {
+                case LiveView::Off:
+                    *s_err << "we want it off, so we don't have to do anything.";
+                    pushErrMsg(Debug);
+                    break;
+                case LiveView::On:
+                    *s_err << "we want it on, so we call startLiveView";
+                    pushErrMsg(Debug);
+                    startLiveView();
+                    break;
+                case LiveView::Paused:
+                    *s_err << "we want it paused, so we set state to paused";
+                    pushErrMsg(Debug);
+                    m_liveView->m_state = LiveView::Paused;
+                    break;
+                default:
+                    assert(false);
+            }
+            break;
+    }
 }
 
 bool Camera::pauseLiveView()
@@ -870,8 +876,8 @@ bool Camera::pauseLiveView()
             // nothing to do
             return true;
         case LiveView::On:
-            if (stopLiveView()) {
-                m_liveView->m_state = LiveView::Paused;
+            if (_stopLiveView()) {
+                m_liveView->m_desiredNewState = LiveView::Paused;
                 return true;
             } else {
                 return false;
@@ -887,16 +893,32 @@ bool Camera::pauseLiveView()
 
 bool Camera::resumeLiveView()
 {
+    *s_err << "Attempting to resume live view.";
+    pushErrMsg(Debug);
     switch (m_liveView->m_state) {
         case LiveView::Off:
+            *s_err << "Live view is off, we don't need to resume.";
+            pushErrMsg(Debug);
+            return true;
         case LiveView::On:
-            // we don't need to do anything
+            *s_err << "Live view already on, don't need to do anything.";
+            pushErrMsg(Debug);
             return true;
         case LiveView::Paused:
             // this is the normal way to resume
-            return startLiveView();
+            *s_err << "live view is paused, so we call _startLiveView";
+            pushErrMsg(Debug);
+            if (! _startLiveView())
+                return false;
+            m_liveView->m_desiredNewState = LiveView::On;
         case LiveView::WaitingToStop:
+            *s_err << "Already waiting to stop live view, so we change the next desired state to On";
+            pushErrMsg(Debug);
+            m_liveView->m_desiredNewState = LiveView::On;
+            return true;
         case LiveView::WaitingToStart:
+            *s_err << "Already waiting to start live view, so we change the next desired state to On";
+            pushErrMsg(Debug);
             m_liveView->m_desiredNewState = LiveView::On;
             return true;
     }
@@ -925,12 +947,15 @@ bool Camera::setComputerCapabilities()
 
 bool Camera::takeSinglePicture(string outFile)
 {
-    pauseLiveView();
+    if (! pauseLiveView())
+        return false;
     m_picOutFile = outFile;
 
     if (! setComputerCapabilities())
         return false;
 
+    *s_err << "Sending take picture command.";
+    pushErrMsg(Debug);
     // take a picture with the camera and save it to outfile
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
@@ -1136,28 +1161,8 @@ bool Camera::startLiveView()
             pushErrMsg(Warning);
             return true;
         case LiveView::Off:
-            // tell the computer to send live data to the computer
-            EdsError err;
-            EdsUInt32 device;
-            err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-
-            if (err) {
-                *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
-                pushErrMsg();
+            if (! _startLiveView())
                 return false;
-            }
-
-            device |= kEdsEvfOutputDevice_PC;
-            err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-
-            if (err) {
-                *s_err << "Unable to turn on live view: " << ErrorMap::errorMsg(err);
-                pushErrMsg();
-            }
-
-            *s_err << "Requested live view to turn on.";
-            pushErrMsg(Debug);
-            m_liveView->m_state = LiveView::WaitingToStart;
             m_liveView->m_desiredNewState = LiveView::On;
             return true;
         case LiveView::WaitingToStop:
@@ -1179,6 +1184,34 @@ bool Camera::startLiveView()
     return false;
 }
 
+bool Camera::_startLiveView()
+{
+    // tell the computer to send live data to the computer
+    EdsError err;
+    EdsUInt32 device;
+    err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err) {
+        *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
+    device |= kEdsEvfOutputDevice_PC;
+    err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err) {
+        *s_err << "Unable to turn on live view: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
+
+    *s_err << "Requested live view to turn on.";
+    pushErrMsg(Debug);
+    m_liveView->m_state = LiveView::WaitingToStart;
+
+    return true;
+}
+
 bool Camera::stopLiveView()
 {
     switch (m_liveView->m_state) {
@@ -1196,32 +1229,40 @@ bool Camera::stopLiveView()
             m_liveView->m_desiredNewState = LiveView::Off;
             return true;
         case LiveView::On:
-            // tell the camera to stop sending live data to the computer
-            EdsError err = EDS_ERR_OK;
-            EdsUInt32 device;
-            err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-
-            if (err) {
-                *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
-                pushErrMsg();
+            if (! _stopLiveView())
                 return false;
-            }
-
-            device &= ~kEdsEvfOutputDevice_PC;
-            err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-
-            if (err) {
-                *s_err << "Unable to turn off live view: " << ErrorMap::errorMsg(err);
-                pushErrMsg();
-                return false;
-            }
-
-            m_liveView->m_state = LiveView::WaitingToStop;
             m_liveView->m_desiredNewState = LiveView::Off;
             return true;
     }
     assert(false);
     return false;
+}
+
+bool Camera::_stopLiveView()
+{
+    // tell the camera to stop sending live data to the computer
+    EdsError err = EDS_ERR_OK;
+    EdsUInt32 device;
+    err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err) {
+        *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
+    device &= ~kEdsEvfOutputDevice_PC;
+    err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+
+    if (err) {
+        *s_err << "Unable to turn off live view: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
+    m_liveView->m_state = LiveView::WaitingToStop;
+
+    return true;
 }
 
 EdsSize Camera::liveViewImageSize() const
