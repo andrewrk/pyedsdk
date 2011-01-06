@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <queue>
+#include <sstream>
 using namespace std;
 
 #include "EDSDK.h"
@@ -22,33 +23,46 @@ class Camera
             DeviceBusy
         };
 
+        enum ErrorLevel {
+            Debug,
+            Warning,
+            Error,
+            None,
+        };
+
+        struct ErrorMessage {
+            ErrorLevel level;
+            string msg;
+        };
+
     public: // methods
         ~Camera();
 
         // you are responsible for deleting it when you're done
         static Camera * getFirstCamera();
 
+        // try to connect to a camera. returns success.
+        bool connect();
+        bool disconnect();
+
         // use if you want to start over
         static void terminate();
 
-        // true if everything is ok
-        bool good() const;
-
         // name of the camera model
-        string name() const;
+        string name();
 
         // takes a picture with the camera and puts it in outFile.
         // returns immediately but the picture won't be finished immediately.
-        void takeSinglePicture(string outFile);
+        bool takeSinglePicture(string outFile);
 
         // if you want to be notified when a picture is finally done, use this:
         void setPictureCompleteCallback(takePictureCompleteCallback callback);
 
         // you have to put the camera in "live view mode" before you can get live view frames.
-        void startLiveView();
-        void stopLiveView();
+        bool startLiveView();
+        bool stopLiveView();
         // this function refreshes the frame buffer with a new image from the camera.
-        void grabLiveViewFrame();
+        bool grabLiveViewFrame();
 
         // size of the frames coming through live view. only valid once
         // live view has started.
@@ -64,7 +78,7 @@ class Camera
         void setZoomRatio(int zoomRatio);
 
         // white balance property
-        EdsWhiteBalance whiteBalance() const;
+        EdsWhiteBalance whiteBalance();
         void setWhiteBalance(EdsWhiteBalance whiteBalance);
 
         // get the oldest message from the event queue and remove it.
@@ -78,10 +92,19 @@ class Camera
         int liveViewFrameBufferSize() const; 
 
         // perform auto focus once right now
-        void autoFocus();
+        bool autoFocus();
+
+        // sets the log level for error messages. messages are added to a
+        // queue that you can access with popErrMsg()
+        void setErrorLevel(ErrorLevel level);
+
+        // gets the oldest error message from the queue
+        ErrorMessage popErrMsg();
+        int errMsgQueueSize() const;
 
     private: // variables
         static bool s_initialized;
+        static bool s_staticDataInitialized;
 
         class LiveView {
             public:
@@ -102,7 +125,9 @@ class Camera
                 WaitingToStop
             };
 
+            // if you set m_state to either of the Waiting states, you need to also set m_desiredNewState
             State m_state;
+            State m_desiredNewState; // what state to try to get to after we're done waiting
 
             EdsStreamRef m_streamPtr;
             EdsSize m_imageSize;
@@ -110,10 +135,10 @@ class Camera
             // the allocated space we have set aside for frame data
             unsigned char * m_frameBuffer;
 
-            LiveView();
+            LiveView(Camera * camera);
             ~LiveView();
         };
-        LiveView m_liveView;
+        LiveView * m_liveView;
 
         static const string c_cameraName_5D;
         static const string c_cameraName_40D;
@@ -139,7 +164,6 @@ class Camera
         // what file to save the next picture as
         string m_picOutFile;
 
-
         EdsPoint m_zoomPosition;
         bool m_pendingZoomPosition;
         EdsPoint m_pendingZoomPoint;
@@ -153,25 +177,24 @@ class Camera
         // how many milliseconds to sleep before doing the event pump
         static const int c_sleepAmount;
 
-        // do we make sure that output pictures are jpegs?
-        static const bool c_forceJpeg;
-
         queue<string> m_pictureDoneQueue;
-
-        // true if everything is working
-        bool m_good;
 
         takePictureCompleteCallback m_pictureCompleteCallback;
 
+        stringstream * m_err;
+        queue<ErrorMessage> m_errMsgQueue;
+
+        bool m_connected;
+        ErrorLevel m_errorLevel;
+
     private: // methods
         static void initialize();
+        static void initStaticData();
 
-        Camera(EdsCameraRef cam);
+        Camera();
 
-        CameraModelData cameraSpecificData() const;
+        CameraModelData cameraSpecificData();
 
-        // try to connect to a camera. returns success.
-        void establishSession();
 
         static EdsError EDSCALLBACK staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext);
         static EdsError EDSCALLBACK staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext);
@@ -183,17 +206,15 @@ class Camera
 
         string ensureDoesNotExist(string outfile);
 
-        void transferOneItem(EdsBaseRef inRef, string outFolder);
-        bool isBusy();
-        void setComputerCapabilities();
+        bool transferOneItem(EdsBaseRef inRef, string outFolder);
+        bool setComputerCapabilities();
 
-        // internal take picture function
-        void takePicture();
+        bool pauseLiveView();
+        bool resumeLiveView();
 
-        void pauseLiveView();
-        void resumeLiveView();
+        void pushErrMsg(ErrorLevel level = Error);
 
-
+    friend class LiveView;
 };
 
 #endif

@@ -1,28 +1,22 @@
 from . import Camera as CppCamera
 import threading, time
 
-__version__ = '0.3'
+__version__ = '0.4'
 
 class Camera:
     def _checkPictureQueue(self):
         while self._running:
             while self._camera.pictureDoneQueueSize() > 0:
                 pic = self._camera.popPictureDoneQueue()
+                self.flushErrors()
                 if self._pictureCompleteCallback:
                     self._pictureCompleteCallback(pic)
             time.sleep(0.10)
 
-    def _grabLiveViewFrame(self):
-        while self._running:
-            if self._liveViewOn:
-                # get frame
-                pass
-            time.sleep(0.30)
-
     def __init__(self, cpp_camera):
         self._camera = cpp_camera
         self._pictureCompleteCallback = None
-        self._liveViewCallback = None
+        self._errorMessageCallback = None
         self._liveViewOn = False
 
         # threads
@@ -32,23 +26,19 @@ class Camera:
         self._pictureThread = threading.Thread(target=Camera._checkPictureQueue, args=(self,))
         self._pictureThread.start()
 
-        # thread to grab live view frames
-        self._liveViewThread = threading.Thread(target=Camera._grabLiveViewFrame, args=(self,))
-        self._liveViewThread.start()
-
     def __del__(self):
         self._running = False
         self._pictureThread.join()
-        self._liveViewThread.join()
-
-    def good(self):
-        return self._camera.good()
 
     def name(self):
-        return self._camera.name()
+        value = self._camera.name()
+        self.flushErrors()
+        return value
 
     def takePicture(self, filename):
-        return self._camera.takeSinglePicture(filename)
+        value = self._camera.takeSinglePicture(filename)
+        self.flushErrors()
+        return value
 
     def setPictureCompleteCallback(self, callback):
         """
@@ -56,19 +46,23 @@ class Camera:
         """
         self._pictureCompleteCallback = callback
 
-    def setLiveViewCallback(self, callback):
+    def setErrorMessageCallback(self, callback):
         """
-        callback(bytes) will be called for each live view frame coming from the camera.
+        callback(level, message) will be called when there is an error message
         """
-        self._liveViewCallback = callback
+        self._errorMessageCallback = callback
 
     def startLiveView(self):
-        self._camera.startLiveView()
-        self._liveViewOn = True
+        self._liveViewOn = self._camera.startLiveView()
+        self.flushErrors()
+        return self._liveViewOn
 
     def stopLiveView(self):
-        self._camera.stopLiveView()
-        self._liveViewOn = False
+        success = self._camera.stopLiveView()
+        self.flushErrors()
+        if success:
+            self._liveViewOn = False
+        return not self._liveViewOn
 
     def grabLiveViewFrame(self):
         """
@@ -78,6 +72,7 @@ class Camera:
         if not self._liveViewOn:
             self.startLiveView()
         self._camera.grabLiveViewFrame()
+        self.flushErrors()
 
     def liveViewMemoryView(self):
         """
@@ -87,31 +82,56 @@ class Camera:
         return memoryview(self._camera)
 
     def liveViewImageSize(self):
-        return self._camera.liveViewImageSize()
+        value = self._camera.liveViewImageSize()
+        self.flushErrors()
+        return value
 
     def zoomPosition(self):
-        return self._camera.zoomPosition()
+        value = self._camera.zoomPosition()
+        self.flushErrors()
+        return value
 
     def setZoomPosition(self, x, y):
-        return self._camera.setZoomPosition(x, y)
+        value = self._camera.setZoomPosition(x, y)
+        self.flushErrors()
+        return value
 
     def zoomRatio(self):
-        return self._camera.zoomRatio()
+        value = self._camera.zoomRatio()
+        self.flushErrors()
+        return value
 
     def setZoomRatio(self, factor):
-        return self._camera.setZoomRatio(factor)
+        value = self._camera.setZoomRatio(factor)
+        self.flushErrors()
+        return value
 
     def whiteBalance(self):
-        return self._camera.whiteBalance()
+        value = self._camera.whiteBalance()
+        self.flushErrors()
+        return value
 
     def setWhiteBalance(self, white_balance):
-        return self._camera.setWhiteBalance(white_balance)
+        value = self._camera.setWhiteBalance(white_balance)
+        self.flushErrors()
+        return value
 
     def autoFocus(self):
-        return self._camera.autoFocus()
+        value = self._camera.autoFocus()
+        self.flushErrors()
+        return value
 
-    def pressShutterHalfway(self):
-        return self._camera.pressShutterHalfway()
+    def flushErrors(self):
+        while self._camera.errMsgQueueSize() > 0:
+            level, msg = self._camera.popErrMsg()
+            if self._errorMessageCallback:
+                self._errorMessageCallback(level, msg)
+
+class ErrorLevel:
+    Debug = 0
+    Warn = 1
+    Error = 2
+    NoMessages = 3
 
 def getFirstCamera():
     return Camera(CppCamera.getFirstCamera())

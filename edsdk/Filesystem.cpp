@@ -123,7 +123,7 @@ void Filesystem::ensurePathExists(string path)
         return;
     }
     
-    upOne = upOne.substr(0, pos-1);
+    upOne = upOne.substr(0, pos);
     ensurePathExists(upOne);
 
     mkdir(path.c_str());

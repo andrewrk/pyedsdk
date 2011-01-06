@@ -17,8 +17,10 @@ extern "C" {
     static int Camera_getbuffer(CameraObject * self, PyObject * _view, int flags);
     static void Camera_releasebuffer(CameraObject * self, PyObject * view);
     static PyBufferProcs Camera_bufferProcs = {(getbufferproc)Camera_getbuffer, (releasebufferproc)Camera_releasebuffer};
+
+    static PyObject * Camera_connect(CameraObject * self, PyObject * args);
+    static PyObject * Camera_disconnect(CameraObject * self, PyObject * args);
     
-    static PyObject * Camera_good(CameraObject * self, PyObject * args);
     static PyObject * Camera_name(CameraObject * self, PyObject * args);
     static PyObject * Camera_takeSinglePicture(CameraObject * self, PyObject * args);
     static PyObject * Camera_startLiveView(CameraObject * self, PyObject * args);
@@ -32,17 +34,22 @@ extern "C" {
     static PyObject * Camera_setWhiteBalance(CameraObject * self, PyObject * args);
     static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args);
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
-    static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
     static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
     static PyObject * Camera_autoFocus(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setErrorLevel(CameraObject * self, PyObject * args);
+    static PyObject * Camera_popErrMsg(CameraObject * self, PyObject * args);
+    static PyObject * Camera_errMsgQueueSize(CameraObject * self, PyObject * args);
     static PyMethodDef CameraMethods[] = {
-        {"good",                (PyCFunction)Camera_good,                METH_VARARGS, "Return whether the Camera is working"},
+        {"connect",             (PyCFunction)Camera_connect,             METH_VARARGS, "establish a session on the camera"},
+        {"disconnect",          (PyCFunction)Camera_disconnect,          METH_VARARGS, "release the session with the camera"},
+
         {"name",                (PyCFunction)Camera_name,                METH_VARARGS, "Return the model name of the camera"},
         {"takeSinglePicture",   (PyCFunction)Camera_takeSinglePicture,   METH_VARARGS, "takes one picture to file specified."},
         {"startLiveView",       (PyCFunction)Camera_startLiveView,       METH_VARARGS, "tells the camera to go into live view mode"},
         {"stopLiveView",        (PyCFunction)Camera_stopLiveView,        METH_VARARGS, "tells the camera to come out of live view mode"},
         {"liveViewImageSize",   (PyCFunction)Camera_liveViewImageSize,   METH_VARARGS, "returns (width, height) of the live view image size."
                                                                                        " only valid after live view has been on."},
+        {"autoFocus",           (PyCFunction)Camera_autoFocus,           METH_VARARGS, "performs an auto focus once right now"},
         {"zoomPosition",        (PyCFunction)Camera_zoomPosition,        METH_VARARGS, "returns (x, y) of the zoom position when zoomed in in live view."},
         {"setZoomPosition",     (PyCFunction)Camera_setZoomPosition,     METH_VARARGS, "sets the zoom position when zoomed in in live view."},
         {"zoomRatio",           (PyCFunction)Camera_zoomRatio,           METH_VARARGS, "returns the zoom factor."},
@@ -53,7 +60,9 @@ extern "C" {
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
         {"grabLiveViewFrame",   (PyCFunction)Camera_grabLiveViewFrame,   METH_VARARGS, "refresh the frame buffer with a new frame from the camera."},
 
-        {"autoFocus",           (PyCFunction)Camera_autoFocus,           METH_VARARGS, "performs an auto focus once right now"},
+        {"setErrorLevel",       (PyCFunction)Camera_setErrorLevel,       METH_VARARGS, "set which error messages will be added to the queue"},
+        {"popErrMsg",           (PyCFunction)Camera_popErrMsg,           METH_VARARGS, "pops the oldest error message that was generated"},
+        {"errMsgQueueSize",     (PyCFunction)Camera_errMsgQueueSize,     METH_VARARGS, "returns the amount of error messages in the queue"},
 
         {NULL, NULL, 0, NULL} // sentinel
     };
@@ -106,12 +115,23 @@ extern "C" {
         PyObject_FREE(self);
     }
 
-    static PyObject * Camera_good(CameraObject * self, PyObject * args)
+    static PyObject * Camera_connect(CameraObject * self, PyObject * args)
     {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        if (self->camera->good())
+        if (self->camera->connect())
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
+    }
+
+    static PyObject * Camera_disconnect(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        if (self->camera->connect())
             Py_RETURN_TRUE;
         else
             Py_RETURN_FALSE;
@@ -131,9 +151,10 @@ extern "C" {
         if (! PyArg_ParseTuple(args, "s", &outFile))
             return NULL;
 
-        self->camera->takeSinglePicture(outFile);
-
-        Py_RETURN_NONE;
+        if (self->camera->takeSinglePicture(outFile))
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
     }
 
     static PyObject * Camera_startLiveView(CameraObject * self, PyObject * args)
@@ -141,9 +162,10 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        self->camera->startLiveView();
-
-        Py_RETURN_NONE;
+        if (self->camera->startLiveView())
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
     }
 
     static PyObject * Camera_stopLiveView(CameraObject * self, PyObject * args)
@@ -151,9 +173,10 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        self->camera->stopLiveView();
-
-        Py_RETURN_NONE;
+        if (self->camera->stopLiveView())
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
     }
 
     static PyObject * Camera_liveViewImageSize(CameraObject * self, PyObject * args)
@@ -256,9 +279,10 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
         
-        self->camera->grabLiveViewFrame();
-
-        Py_RETURN_NONE;
+        if (self->camera->grabLiveViewFrame())
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
     }
 
     static PyObject * Camera_autoFocus(CameraObject * self, PyObject * args)
@@ -266,9 +290,42 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        self->camera->autoFocus();
+        if (self->camera->autoFocus())
+            Py_RETURN_TRUE;
+        else
+            Py_RETURN_FALSE;
+    }
+
+    static PyObject * Camera_setErrorLevel(CameraObject * self, PyObject * args)
+    {
+        int level;
+
+        if (! PyArg_ParseTuple(args, "i", &level))
+            return NULL;
+
+        self->camera->setErrorLevel((Camera::ErrorLevel)level);
 
         Py_RETURN_NONE;
+    }
+
+    static PyObject * Camera_popErrMsg(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        Camera::ErrorMessage msg = self->camera->popErrMsg();
+
+        return Py_BuildValue("(i,s)", msg.level, msg.msg.c_str());
+    }
+
+    static PyObject * Camera_errMsgQueueSize(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int count = self->camera->errMsgQueueSize();
+
+        return Py_BuildValue("i", count);
     }
 
     // -----

@@ -1,6 +1,8 @@
 #include "Camera.h"
 #include <windows.h>
 
+#include "ErrorMap.h"
+
 #include "Filesystem.h"
 using namespace Filesystem;
 
@@ -18,9 +20,8 @@ const int Camera::LiveView::c_frameBufferSize = 0x800000;
 const int Camera::c_sleepTimeout = 10000;
 const int Camera::c_sleepAmount = 50;
 
-const bool Camera::c_forceJpeg = true;
-
 bool Camera::s_initialized = false;
+bool Camera::s_staticDataInitialized = false;
 
 map<string, Camera::CameraModelData> Camera::s_modelData;
 
@@ -28,8 +29,17 @@ void Camera::initialize()
 {
     if (s_initialized)
         return;
-
     s_initialized = true;
+
+    initStaticData();
+    EdsInitializeSDK();
+}
+
+void Camera::initStaticData()
+{
+    if (s_staticDataInitialized)
+        return;
+    s_staticDataInitialized = true;
 
     // camera-specific information
     // 40D
@@ -74,11 +84,9 @@ void Camera::initialize()
     s_modelData[c_cameraName_40D] = data40D;
     s_modelData[c_cameraName_5D] = data5D;
     s_modelData[c_cameraName_7D] = data7D;
-
-    EdsInitializeSDK();
 }
 
-Camera::LiveView::LiveView() :
+Camera::LiveView::LiveView(Camera * camera) :
     m_state(Off),
     m_streamPtr(NULL)
 {
@@ -87,8 +95,12 @@ Camera::LiveView::LiveView() :
     
     // set up buffer
     m_frameBuffer = new unsigned char[c_frameBufferSize];
-    EdsError err = EDS_ERR_OK;
-    err = err || EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
+    EdsError err = EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
+    
+    if (err) {
+        *(camera->m_err) << "Unable to create memory stream for live view: " << ErrorMap::errorMsg(err);
+        camera->pushErrMsg(Camera::Error);
+    }
 }
 
 Camera::LiveView::~LiveView()
@@ -97,73 +109,125 @@ Camera::LiveView::~LiveView()
     delete[] m_frameBuffer;
 }
 
-Camera::Camera(EdsCameraRef cam) :
-    m_liveView(),
-    m_cam(cam),
+Camera::Camera() :
+    m_liveView(NULL),
     m_pendingZoomPosition(false),
     m_zoomRatio(1),
     m_pendingZoomRatio(false),
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
-    m_good(false),
-    m_pictureCompleteCallback(NULL)
+    m_pictureCompleteCallback(NULL),
+    m_connected(false),
+    m_errorLevel(None)
 {
-    // call static initializer
-    initialize();
-
     m_zoomPosition.x = 0;
     m_zoomPosition.y = 0;
     m_pendingZoomPoint.x = 0;
     m_pendingZoomPoint.y = 0;
-
-    establishSession();
 }
 
 Camera::~Camera()
 {
-    // release session
-    EdsCloseSession(m_cam);
-    EdsRelease(m_cam);
+    disconnect();
+}
+
+bool Camera::disconnect()
+{
+    delete m_liveView;
+    m_liveView = NULL;
+
+    if (m_connected) {
+        // release session
+        EdsError err;
+        err = EdsCloseSession(m_cam);
+
+        bool success = true;
+        if (err) {
+            *m_err << "Unable to close session: " << ErrorMap::errorMsg(err);
+            pushErrMsg();
+            success = false;
+        }
+
+        err = EdsRelease(m_cam);
+
+        if (err) {
+            *m_err << "Unable to deallocate session: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        }
+
+        return success;
+    }
+
+    return true;
 }
 
 Camera * Camera::getFirstCamera()
 {
     initialize();
 
-    EdsCameraListRef camList = NULL;
-    EdsError err = EDS_ERR_OK;
+    Camera * cam = new Camera();
 
-    err = err || EdsGetCameraList(&camList);
+    EdsCameraListRef camList = NULL;
+    EdsError err;
+
+    err = EdsGetCameraList(&camList);
+    if (err) {
+        *(cam->m_err) << "Unable to get camera list: " << ErrorMap::errorMsg(err);
+        cam->pushErrMsg();
+        delete cam;
+        return NULL;
+    }
+    if (! camList) {
+        *(cam->m_err) << "EDSDK didn't give us a camera list ref.";
+        cam->pushErrMsg();
+        delete cam;
+        return NULL;
+    }
 
     EdsUInt32 camCount = 0;
-    err = err || EdsGetChildCount(camList, &camCount);
+    err = EdsGetChildCount(camList, &camCount);
+
+    if (err) {
+        *(cam->m_err) << "Unable to get camera count: " << ErrorMap::errorMsg(err);
+        cam->pushErrMsg();
+        EdsRelease(camList);
+        delete cam;
+        return NULL;
+    }
 
     if (camCount == 0) {
-        fprintf(stderr, "ERROR: No camera connected.\n");
-        if (camList)
-            EdsRelease(camList);
+        *(cam->m_err) << "No camera connected.";
+        cam->pushErrMsg(Warning);
+        EdsRelease(camList);
+        delete cam;
         return NULL;
     }
 
     // get the first camera
     EdsCameraRef camHandle;
-    err = err || EdsGetChildAtIndex(camList, 0, &camHandle);
+    err = EdsGetChildAtIndex(camList, 0, &camHandle);
 
-    Camera * cam = NULL;
-    
-    if (! err)
-        cam = new Camera(camHandle);
+    if (err) {
+        *(cam->m_err) << "Unable to get connected camera handle: " << ErrorMap::errorMsg(err);
+        cam->pushErrMsg(Error);
+        EdsRelease(camList);
+        delete cam;
+        return NULL;
+    }
 
-    // release the camera list data
-    err = err || EdsRelease(camList);
+    cam->m_cam = camHandle;
 
-    if (err)
-        fprintf(stderr, "ERROR: Error occurred when getting first camera: %u\n", err);
+    err = EdsRelease(camList);
+
+    if (err) {
+        *(cam->m_err) << "Unable to release camera list handle: " << ErrorMap::errorMsg(err);
+        cam->pushErrMsg(Warning);
+    }
 
     return cam;
 }
 
-Camera::CameraModelData Camera::cameraSpecificData() const
+Camera::CameraModelData Camera::cameraSpecificData()
 {
     string myName = name();
 
@@ -174,61 +238,94 @@ Camera::CameraModelData Camera::cameraSpecificData() const
     return s_modelData[c_cameraName_40D];
 }
 
-void Camera::establishSession()
+bool Camera::connect()
 {
-    EdsError err = EDS_ERR_OK;
+    delete m_liveView;
+    m_liveView = new LiveView(this);
+
+    EdsError err;
 
     // open a session
-    err = err || EdsOpenSession(m_cam);
+    err = EdsOpenSession(m_cam);
+
+    if (err) {
+        *m_err << "Unable to open session: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
 
     // handlers
-    err = err || EdsSetCameraStateEventHandler(m_cam, kEdsStateEvent_All, &staticStateEventHandler, this);
-    err = err || EdsSetObjectEventHandler(m_cam, kEdsObjectEvent_All, &staticObjectEventHandler, this);
-    err = err || EdsSetPropertyEventHandler(m_cam, kEdsPropertyEvent_All, &staticPropertyEventHandler, this);
+    err = EdsSetCameraStateEventHandler(m_cam, kEdsStateEvent_All, &staticStateEventHandler, this);
+
+    if (err) {
+        *m_err << "Unable to set camera state event handler: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
+    err = EdsSetObjectEventHandler(m_cam, kEdsObjectEvent_All, &staticObjectEventHandler, this);
+
+    if (err) {
+        *m_err << "Unable to set object event handler: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+    
+    err = EdsSetPropertyEventHandler(m_cam, kEdsPropertyEvent_All, &staticPropertyEventHandler, this);
+
+    if (err) {
+        *m_err << "Unable to set property event handler: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
 
     // set default options
     // save to computer, not memory card
     EdsUInt32 value = kEdsSaveTo_Host;
-    err = err || EdsSetPropertyData(m_cam, kEdsPropID_SaveTo, 0, sizeof(EdsUInt32), &value);
+    err = EdsSetPropertyData(m_cam, kEdsPropID_SaveTo, 0, sizeof(EdsUInt32), &value);
 
-    if (c_forceJpeg) {
-        // enforce JPEG format
-        EdsUInt32 qs;
-        err = err || EdsGetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs);
-        // clear the old image type setting and set the new one
-        qs = qs & 0xff0fffff | (kEdsImageType_Jpeg << 20);
-        err = err || EdsSetPropertyData(m_cam, kEdsPropID_ImageQuality, 0, sizeof(qs), &qs);
+    if (err) {
+        *m_err << "Unable to set property SaveTo device to computer: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
 
-    if (err)
-        fprintf(stderr, "ERROR: When establishing session: %u\n", err);
-
-    m_good = (err == 0);
+    return true;
 }
 
 EdsError EDSCALLBACK Camera::staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext)
 {
     // transfer from static to member
-    assert(inContext);
+    if (! inContext)
+        return 0;
+
     ((Camera *) inContext)->objectEventHandler(inEvent, inRef);
+
     if (inRef)
         EdsRelease(inRef);
+
     return 0;
 }
 
 EdsError EDSCALLBACK Camera::staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext)
 {
     // transfer from static to member
-    assert(inContext);
+    if (! inContext)
+        return 0;
+
     ((Camera *) inContext)->stateEventHandler(inEvent, inEventData);
+
     return 0;
 }
 
 EdsError EDSCALLBACK Camera::staticPropertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam, EdsVoid * inContext)
 {
     // transfer from static to member
-    assert(inContext);
+    if (! inContext)
+        return 0;
+
     ((Camera *) inContext)->propertyEventHandler(inEvent, inPropertyID, inParam);
+
     return 0;
 }
 
@@ -237,347 +334,517 @@ void Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
     if (inEvent == kEdsObjectEvent_DirItemRequestTransfer) {
         transferOneItem(inRef, m_picOutFile);
     } else {
-        fprintf(stderr, "DEBUG: objectEventHandler: event %u\n", inEvent);
+        *m_err << "objectEventHandler: event " << inEvent;
+        pushErrMsg(Debug);
     }
 }
 
 void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 {
-    fprintf(stderr, "DEBUG: stateEventHandler: event %u, parameter %u\n", inEvent, inEventData);
+    *m_err << "stateEventHandler: event " << inEvent << ", parameter " << inEventData;
+    pushErrMsg(Debug);
 }
 
 void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inPropertyID, EdsUInt32 inParam)
 {
     switch (inPropertyID) {
 		case kEdsPropID_Unknown:
-            fprintf(stderr, "Incoming property event: Unknown\n");
-            break;
+            *m_err << "Incoming property event: Unknown";
+            pushErrMsg(Warning);
+			break;
 		case kEdsPropID_ProductName:
-            fprintf(stderr, "Incoming property event: ProductName\n");
-            break;
+            *m_err << "Incoming property event: ProductName";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_BodyID:
-            fprintf(stderr, "Incoming property event: BodyID\n");
-            break;
+            *m_err << "Incoming property event: BodyID";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_OwnerName:
-            fprintf(stderr, "Incoming property event: OwnerName\n");
-            break;
+            *m_err << "Incoming property event: OwnerName";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_MakerName:
-            fprintf(stderr, "Incoming property event: MakerName\n");
-            break;
+            *m_err << "Incoming property event: MakerName";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_DateTime:
-            fprintf(stderr, "Incoming property event: DateTime\n");
-            break;
+            *m_err << "Incoming property event: DateTime";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FirmwareVersion:
-            fprintf(stderr, "Incoming property event: FirmwareVersion\n");
-            break;
+            *m_err << "Incoming property event: FirmwareVersion";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_BatteryLevel:
-            fprintf(stderr, "Incoming property event: BatteryLevel\n");
-            break;
+            *m_err << "Incoming property event: BatteryLevel";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_CFn:
-            fprintf(stderr, "Incoming property event: CFn\n");
-            break;
+            *m_err << "Incoming property event: CFn";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_SaveTo:
-            fprintf(stderr, "Incoming property event: SaveTo\n");
-            break;
+            *m_err << "Incoming property event: SaveTo";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_CurrentStorage:
-            fprintf(stderr, "Incoming property event: CurrentStorage\n");
-            break;
+            *m_err << "Incoming property event: CurrentStorage";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_CurrentFolder:
-            fprintf(stderr, "Incoming property event: CurrentFolder\n");
-            break;
+            *m_err << "Incoming property event: CurrentFolder";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_MyMenu:
-            fprintf(stderr, "Incoming property event: MyMenu\n");
-            break;
+            *m_err << "Incoming property event: MyMenu";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_BatteryQuality:
-            fprintf(stderr, "Incoming property event: BatteryQuality\n");
-            break;
+            *m_err << "Incoming property event: BatteryQuality";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_HDDirectoryStructure:
-            fprintf(stderr, "Incoming property event: HDDirectoryStructure\n");
-            break;
+            *m_err << "Incoming property event: HDDirectoryStructure";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ImageQuality:
-            fprintf(stderr, "Incoming property event: ImageQuality\n");
-            break;
+            *m_err << "Incoming property event: ImageQuality";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_JpegQuality:
-            fprintf(stderr, "Incoming property event: JpegQuality\n");
-            break;
+            *m_err << "Incoming property event: JpegQuality";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Orientation:
-            fprintf(stderr, "Incoming property event: Orientation\n");
-            break;
+            *m_err << "Incoming property event: Orientation";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ICCProfile:
-            fprintf(stderr, "Incoming property event: ICCProfile\n");
-            break;
+            *m_err << "Incoming property event: ICCProfile";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FocusInfo:
-            fprintf(stderr, "Incoming property event: FocusInfo\n");
-            break;
+            *m_err << "Incoming property event: FocusInfo";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_DigitalExposure:
-            fprintf(stderr, "Incoming property event: DigitalExposure\n");
-            break;
+            *m_err << "Incoming property event: DigitalExposure";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_WhiteBalance:
-            fprintf(stderr, "Incoming property event: WhiteBalance\n");
-            break;
+            *m_err << "Incoming property event: WhiteBalance";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ColorTemperature:
-            fprintf(stderr, "Incoming property event: ColorTemperature\n");
-            break;
+            *m_err << "Incoming property event: ColorTemperature";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_WhiteBalanceShift:
-            fprintf(stderr, "Incoming property event: WhiteBalanceShift\n");
-            break;
+            *m_err << "Incoming property event: WhiteBalanceShift";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Contrast:
-            fprintf(stderr, "Incoming property event: Contrast\n");
-            break;
+            *m_err << "Incoming property event: Contrast";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ColorSaturation:
-            fprintf(stderr, "Incoming property event: ColorSaturation\n");
-            break;
+            *m_err << "Incoming property event: ColorSaturation";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ColorTone:
-            fprintf(stderr, "Incoming property event: ColorTone\n");
-            break;
+            *m_err << "Incoming property event: ColorTone";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Sharpness:
-            fprintf(stderr, "Incoming property event: Sharpness\n");
-            break;
+            *m_err << "Incoming property event: Sharpness";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ColorSpace:
-            fprintf(stderr, "Incoming property event: ColorSpace\n");
-            break;
+            *m_err << "Incoming property event: ColorSpace";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ToneCurve:
-            fprintf(stderr, "Incoming property event: ToneCurve\n");
-            break;
+            *m_err << "Incoming property event: ToneCurve";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_PhotoEffect:
-            fprintf(stderr, "Incoming property event: PhotoEffect\n");
-            break;
+            *m_err << "Incoming property event: PhotoEffect";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FilterEffect:
-            fprintf(stderr, "Incoming property event: FilterEffect\n");
-            break;
+            *m_err << "Incoming property event: FilterEffect";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ToningEffect:
-            fprintf(stderr, "Incoming property event: ToningEffect\n");
-            break;
+            *m_err << "Incoming property event: ToningEffect";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ParameterSet:
-            fprintf(stderr, "Incoming property event: ParameterSet\n");
-            break;
+            *m_err << "Incoming property event: ParameterSet";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ColorMatrix:
-            fprintf(stderr, "Incoming property event: ColorMatrix\n");
-            break;
+            *m_err << "Incoming property event: ColorMatrix";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_PictureStyle:
-            fprintf(stderr, "Incoming property event: PictureStyle\n");
-            break;
+            *m_err << "Incoming property event: PictureStyle";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_PictureStyleDesc:
-            fprintf(stderr, "Incoming property event: PictureStyleDesc\n");
-            break;
+            *m_err << "Incoming property event: PictureStyleDesc";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ETTL2Mode:
-            fprintf(stderr, "Incoming property event: ETTL2Mode\n");
-            break;
+            *m_err << "Incoming property event: ETTL2Mode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_PictureStyleCaption:
-            fprintf(stderr, "Incoming property event: PictureStyleCaption\n");
-            break;
+            *m_err << "Incoming property event: PictureStyleCaption";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Linear:
-            fprintf(stderr, "Incoming property event: Linear\n");
-            break;
+            *m_err << "Incoming property event: Linear";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ClickWBPoint:
-            fprintf(stderr, "Incoming property event: ClickWBPoint\n");
-            break;
+            *m_err << "Incoming property event: ClickWBPoint";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_WBCoeffs:
-            fprintf(stderr, "Incoming property event: WBCoeffs\n");
-            break;
+            *m_err << "Incoming property event: WBCoeffs";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_GPSVersionID:
-            fprintf(stderr, "Incoming property event: GPSVersionID\n");
-            break;
+            *m_err << "Incoming property event: GPSVersionID";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSLatitudeRef:
-            fprintf(stderr, "Incoming property event: GPSLatitudeRef\n");
-            break;
+            *m_err << "Incoming property event: GPSLatitudeRef";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSLatitude:
-            fprintf(stderr, "Incoming property event: GPSLatitude\n");
-            break;
+            *m_err << "Incoming property event: GPSLatitude";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSLongitudeRef:
-            fprintf(stderr, "Incoming property event: GPSLongitudeRef\n");
-            break;
+            *m_err << "Incoming property event: GPSLongitudeRef";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSLongitude:
-            fprintf(stderr, "Incoming property event: GPSLongitude\n");
-            break;
+            *m_err << "Incoming property event: GPSLongitude";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSAltitudeRef:
-            fprintf(stderr, "Incoming property event: GPSAltitudeRef\n");
-            break;
+            *m_err << "Incoming property event: GPSAltitudeRef";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSAltitude:
-            fprintf(stderr, "Incoming property event: GPSAltitude\n");
-            break;
+            *m_err << "Incoming property event: GPSAltitude";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSTimeStamp:
-            fprintf(stderr, "Incoming property event: GPSTimeStamp\n");
-            break;
+            *m_err << "Incoming property event: GPSTimeStamp";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSSatellites:
-            fprintf(stderr, "Incoming property event: GPSSatellites\n");
-            break;
+            *m_err << "Incoming property event: GPSSatellites";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSStatus:
-            fprintf(stderr, "Incoming property event: GPSStatus\n");
-            break;
+            *m_err << "Incoming property event: GPSStatus";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSMapDatum:
-            fprintf(stderr, "Incoming property event: GPSMapDatum\n");
-            break;
+            *m_err << "Incoming property event: GPSMapDatum";
+            pushErrMsg(Debug);
+			break;
 		case    kEdsPropID_GPSDateStamp:
-            fprintf(stderr, "Incoming property event: GPSDateStamp\n");
-            break;
+            *m_err << "Incoming property event: GPSDateStamp";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_AtCapture_Flag:
-            fprintf(stderr, "Incoming property event: AtCapture_Flag\n");
-            break;
+            *m_err << "Incoming property event: AtCapture_Flag";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_AEMode:
-            fprintf(stderr, "Incoming property event: AEMode\n");
-            break;
+            *m_err << "Incoming property event: AEMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_DriveMode:
-            fprintf(stderr, "Incoming property event: DriveMode\n");
-            break;
+            *m_err << "Incoming property event: DriveMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ISOSpeed:
-            fprintf(stderr, "Incoming property event: ISOSpeed\n");
-            break;
+            *m_err << "Incoming property event: ISOSpeed";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_MeteringMode:
-            fprintf(stderr, "Incoming property event: MeteringMode\n");
-            break;
+            *m_err << "Incoming property event: MeteringMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_AFMode:
-            fprintf(stderr, "Incoming property event: AFMode\n");
-            break;
+            *m_err << "Incoming property event: AFMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Av:
-            fprintf(stderr, "Incoming property event: Av\n");
-            break;
+            *m_err << "Incoming property event: Av";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Tv:
-            fprintf(stderr, "Incoming property event: Tv\n");
-            break;
+            *m_err << "Incoming property event: Tv";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ExposureCompensation:
-            fprintf(stderr, "Incoming property event: ExposureCompensation\n");
-            break;
+            *m_err << "Incoming property event: ExposureCompensation";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FlashCompensation:
-            fprintf(stderr, "Incoming property event: FlashCompensation\n");
-            break;
+            *m_err << "Incoming property event: FlashCompensation";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FocalLength:
-            fprintf(stderr, "Incoming property event: FocalLength\n");
-            break;
+            *m_err << "Incoming property event: FocalLength";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_AvailableShots:
-            fprintf(stderr, "Incoming property event: AvailableShots\n");
-            break;
+            *m_err << "Incoming property event: AvailableShots";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Bracket:
-            fprintf(stderr, "Incoming property event: Bracket\n");
-            break;
+            *m_err << "Incoming property event: Bracket";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_WhiteBalanceBracket:
-            fprintf(stderr, "Incoming property event: WhiteBalancingBracket\n");
-            break;
+            *m_err << "Incoming property event: WhiteBalancingBracket";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_LensName:
-            fprintf(stderr, "Incoming property event: LensName\n");
-            break;
+            *m_err << "Incoming property event: LensName";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_AEBracket:
-            fprintf(stderr, "Incoming property event: AEBracket\n");
-            break;
+            *m_err << "Incoming property event: AEBracket";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FEBracket:
-            fprintf(stderr, "Incoming property event: FEBracket\n");
-            break;
+            *m_err << "Incoming property event: FEBracket";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_ISOBracket:
-            fprintf(stderr, "Incoming property event: ISOBracket\n");
-            break;
+            *m_err << "Incoming property event: ISOBracket";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_NoiseReduction:
-            fprintf(stderr, "Incoming property event: NoiseReduction\n");
-            break;
+            *m_err << "Incoming property event: NoiseReduction";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FlashOn:
-            fprintf(stderr, "Incoming property event: FlashOn\n");
-            break;
+            *m_err << "Incoming property event: FlashOn";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_RedEye:
-            fprintf(stderr, "Incoming property event: RedEye\n");
-            break;
+            *m_err << "Incoming property event: RedEye";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_FlashMode:
-            fprintf(stderr, "Incoming property event: FlashMode\n");
-            break;
+            *m_err << "Incoming property event: FlashMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_LensStatus:
-            fprintf(stderr, "Incoming property event: LensStatus\n");
-            break;
+            *m_err << "Incoming property event: LensStatus";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Artist:
-            fprintf(stderr, "Incoming property event: Artist\n");
-            break;
+            *m_err << "Incoming property event: Artist";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Copyright:
-            fprintf(stderr, "Incoming property event: Copyright\n");
-            break;
+            *m_err << "Incoming property event: Copyright";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_DepthOfField:
-            fprintf(stderr, "Incoming property event: DepthOfField\n");
-            break;
+            *m_err << "Incoming property event: DepthOfField";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_EFCompensation:
-            fprintf(stderr, "Incoming property event: EFCompensation\n");
-            break;
-
+            *m_err << "Incoming property event: EFCompensation";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_OutputDevice:
-            // TODO: actually check the property value instead of assuming it's going to do what we want.
-            if (m_liveView.m_state == LiveView::WaitingToStart) {
-                m_liveView.m_state = LiveView::On;
-            } else if (m_liveView.m_state == LiveView::WaitingToStop) {
-                m_liveView.m_state = LiveView::Off;
+            if (inParam == kEdsEvfOutputDevice_PC) {
+                *m_err << "notice from camera: we are now in live view mode.";
+                pushErrMsg(Debug);
+            } else if (inParam == kEdsEvfOutputDevice_TFT) {
+                *m_err << "notice from camera: we are no longer in live view mode.";
+                pushErrMsg(Debug);
+            } else {
+                // should not get here
+                *m_err << "notice from camera: we are now in WTF mode.";
+                pushErrMsg(Warning);
+            }
+            switch (m_liveView->m_state) {
+                case LiveView::Off:
+                    *m_err << "live view changed but we didn't expect it to. live view should be off";
+                    pushErrMsg(Warning);
+                    break;
+                case LiveView::On:
+                    *m_err << "live view changed but we didn't expect it to. live view should be on";
+                    pushErrMsg(Warning);
+                    break;
+                case LiveView::Paused:
+                    *m_err << "live view changed but we didn't expect it to. live view should be paused";
+                    pushErrMsg(Warning);
+                    break;
+                case LiveView::WaitingToStart:
+                    m_liveView->m_state = LiveView::On;
+                    switch (m_liveView->m_desiredNewState) {
+                        case LiveView::Off:
+                            stopLiveView();
+                            break;
+                        case LiveView::On:
+                            break;
+                        case LiveView::Paused:
+                            pauseLiveView();
+                            break;
+                        default:
+                            assert(false);
+                    }
+                    break;
+                case LiveView::WaitingToStop:
+                    m_liveView->m_state = LiveView::Off;
+                    switch (m_liveView->m_desiredNewState) {
+                        case LiveView::Off:
+                            break;
+                        case LiveView::On:
+                            startLiveView();
+                            break;
+                        case LiveView::Paused:
+                            m_liveView->m_state = LiveView::Paused;
+                            break;
+                        default:
+                            assert(false);
+                    }
+                    break;
             }
             break;
 		case kEdsPropID_Evf_Mode:
-            fprintf(stderr, "Incoming property event: EvfMode\n");
-            break;
+            *m_err << "Incoming property event: EvfMode";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_WhiteBalance:
-            fprintf(stderr, "Incoming property event: WhiteBalance\n");
-            break;
+            *m_err << "Incoming property event: WhiteBalance";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_ColorTemperature:
-            fprintf(stderr, "Incoming property event: ColorTemperature\n");
-            break;
+            *m_err << "Incoming property event: ColorTemperature";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_DepthOfFieldPreview:
-            fprintf(stderr, "Incoming property event: DepthOfFieldPreview\n");
-            break;
+            *m_err << "Incoming property event: DepthOfFieldPreview";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_Zoom:
-            fprintf(stderr, "Incoming property event: Zoom\n");
-            break;
+            *m_err << "Incoming property event: Zoom";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_ZoomPosition:
-            fprintf(stderr, "Incoming property event: ZoomPosition\n");
-            break;
+            *m_err << "Incoming property event: ZoomPosition";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_FocusAid:
-            fprintf(stderr, "Incoming property event: FocusAid\n");
-            break;
+            *m_err << "Incoming property event: FocusAid";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_Histogram:
-            fprintf(stderr, "Incoming property event: Histogram\n");
-            break;
+            *m_err << "Incoming property event: Histogram";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_ImagePosition:
-            fprintf(stderr, "Incoming property event: ImagePosition\n");
-            break;
+            *m_err << "Incoming property event: ImagePosition";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_HistogramStatus:
-            fprintf(stderr, "Incoming property event: HistogramStatus\n");
-            break;
+            *m_err << "Incoming property event: HistogramStatus";
+            pushErrMsg(Debug);
+			break;
 		case kEdsPropID_Evf_AFMode:
-            fprintf(stderr, "Incoming property event: AFMode\n");
-            break;
+            *m_err << "Incoming property event: AFMode";
+            pushErrMsg(Debug);
+			break;
         default:
-            fprintf(stderr, "Unrecognized prop id: %u\n", inPropertyID);
+            *m_err << "Unrecognized prop id: " << inPropertyID;
+            pushErrMsg(Warning);
             assert(false);
     }
 }
 
-void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
+bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
 {
     // transfer the image in memory to disk
     EdsDirectoryItemInfo dirItemInfo;
-    EdsStreamRef outStream;
+    EdsStreamRef outStream = NULL;
 
-    EdsError err = EDS_ERR_OK;
+    EdsError err;
 
-    err = err || EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
+    err = EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
 
     if (err) {
-        fprintf(stderr, "ERROR: unable to get directory item info: %u\n", err);
-        return;
+        *m_err << "Unable to get directory item info: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
-
-    // make sure we don't overwrite files
-    ensurePathExists(getDirectoryName(outfile));
-    outfile = makeUnique(outfile);
 
     // get a temp file to write to
     string tmpfile = tmpnam(NULL);
 
     // this creates the outStream that is used by EdsDownload to actually
     // grab and write out the file
-    err = err || EdsCreateFileStream(tmpfile.c_str(), kEdsFileCreateDisposition_CreateAlways, kEdsAccess_ReadWrite, &outStream);
-
-    // do the transfer
-    err = err || EdsDownload(inRef, dirItemInfo.size, outStream);
-    err = err || EdsDownloadComplete(inRef);
-
-    // clean up
-    err = err || EdsRelease(outStream);
+    err = EdsCreateFileStream(tmpfile.c_str(), kEdsFileCreateDisposition_CreateAlways, kEdsAccess_ReadWrite, &outStream);
 
     if (err) {
-        fprintf(stderr, "ERROR: unable to transfer an item: %u\n", err);
-        return;
+        *m_err << "Unable to create file stream: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
 
+    if (! outStream) {
+        *m_err << "Create file stream didn't allocate a stream for us.";
+        pushErrMsg();
+        return false;
+    }
+
+    // do the transfer
+    err = EdsDownload(inRef, dirItemInfo.size, outStream);
+ 
+    if (err) {
+        *m_err << "Unable to download picture: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        EdsRelease(outStream);
+        return false;
+    }
+
+    err = EdsDownloadComplete(inRef);
+
+    if (err) {
+        *m_err << "Unable to finish downloading picture: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        EdsRelease(outStream);
+        return false;
+    }
+
+    // clean up
+    err = EdsRelease(outStream);
+
+    if (err) {
+        *m_err << "Unable to release out stream after downloading: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+
+    // make sure we don't overwrite files
+    ensurePathExists(getDirectoryName(outfile));
+    outfile = makeUnique(outfile);
     moveFile(tmpfile, outfile);
 
     resumeLiveView();
@@ -586,28 +853,53 @@ void Camera::transferOneItem(EdsBaseRef inRef, string outfile)
         m_pictureCompleteCallback(outfile);
 
     m_pictureDoneQueue.push(outfile);
+
+    return true;
 }
 
-void Camera::pauseLiveView()
+bool Camera::pauseLiveView()
 {
-    if (m_liveView.m_state == LiveView::On) {
-        stopLiveView();
-        m_liveView.m_state = LiveView::Paused;
+    switch (m_liveView->m_state) {
+        case LiveView::Paused:
+        case LiveView::Off:
+            // nothing to do
+            return true;
+        case LiveView::On:
+            if (stopLiveView()) {
+                m_liveView->m_state = LiveView::Paused;
+                return true;
+            } else {
+                return false;
+            }
+        case LiveView::WaitingToStart:
+        case LiveView::WaitingToStop:
+            m_liveView->m_desiredNewState = LiveView::Paused;
+            return true;
     }
+    assert(false);
+    return false;
 }
 
-void Camera::resumeLiveView()
+bool Camera::resumeLiveView()
 {
-    if (m_liveView.m_state == LiveView::Paused)
-        startLiveView();
+    switch (m_liveView->m_state) {
+        case LiveView::Off:
+        case LiveView::On:
+            // we don't need to do anything
+            return true;
+        case LiveView::Paused:
+            // this is the normal way to resume
+            return startLiveView();
+        case LiveView::WaitingToStop:
+        case LiveView::WaitingToStart:
+            m_liveView->m_desiredNewState = LiveView::On;
+            return true;
+    }
+    assert(false);
+    return false;
 }
 
-bool Camera::isBusy()
-{
-    return m_liveView.m_state == LiveView::WaitingToStart || m_liveView.m_state == LiveView::WaitingToStop;
-}
-
-void Camera::setComputerCapabilities()
+bool Camera::setComputerCapabilities()
 {
     // tell the camera how much disk space we have left
     EdsCapacity caps;
@@ -617,32 +909,37 @@ void Camera::setComputerCapabilities()
     caps.numberOfFreeClusters = 2147483647; // arbitrary large number
     EdsError err = EdsSetCapacity(m_cam, caps);
 
-    if (err)
-        fprintf(stderr, "ERROR: unable to set computer capabilities: %u\n", err);
+    if (err) {
+        *m_err << "Unable to set computer capabilities: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
+    return true;
 }
 
-void Camera::takePicture()
+bool Camera::takeSinglePicture(string outFile)
 {
-    setComputerCapabilities();
+    pauseLiveView();
+    m_picOutFile = outFile;
+
+    if (! setComputerCapabilities())
+        return false;
 
     // take a picture with the camera and save it to outfile
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
-    if (err != EDS_ERR_OK)
-        fprintf(stderr, "ERROR: unable to take picture: %u\n", err);
-}
-
-void Camera::takeSinglePicture(string outFile)
-{
-    assert(! isBusy());
-    if (isBusy()) {
-        fprintf(stderr, "ERROR: can't take picture, camera is busy.\n");
-        return;
+    if (err == EDS_ERR_OBJECT_NOTREADY) {
+        *m_err << "unable to take picture, camera not ready";
+        pushErrMsg(Warning);
+        return false;
+    } else if (err) {
+        *m_err << "unable to take picture: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
 
-    pauseLiveView();
-    m_picOutFile = outFile;
-    takePicture();
+    return true;
 }
 
 EdsPoint Camera::zoomPosition() const
@@ -667,11 +964,13 @@ void Camera::setZoomRatio(int zoomRatio)
     m_pendingZoomRatio = true;
 }
 
-EdsWhiteBalance Camera::whiteBalance() const
+EdsWhiteBalance Camera::whiteBalance()
 {
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_WhiteBalance, 0, sizeof(m_whiteBalance), (EdsVoid *) &m_whiteBalance);
-    if (err)
-        fprintf(stderr, "ERROR: Unable to get white balance: %u\n", err);
+    if (err) {
+        *m_err << "Unable to get white balance: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
     return m_whiteBalance;
 }
 void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
@@ -680,13 +979,14 @@ void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
     m_pendingWhiteBalance = true;
 }
 
-string Camera::name() const
+string Camera::name()
 {
     EdsDeviceInfo deviceInfo;
     EdsError err = EdsGetDeviceInfo(m_cam, &deviceInfo);
 
     if (err) {
-        fprintf(stderr, "ERROR: Unable to get device info: %u\n", err);
+        *m_err << "Unable to get device info: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
         return string();
     }
 
@@ -696,11 +996,6 @@ string Camera::name() const
 void Camera::setPictureCompleteCallback(takePictureCompleteCallback callback)
 {
     m_pictureCompleteCallback = callback;
-}
-
-bool Camera::good() const
-{
-    return m_good;
 }
 
 int Camera::pictureDoneQueueSize() const
@@ -721,153 +1016,289 @@ string Camera::popPictureDoneQueue()
 
 const unsigned char * Camera::liveViewFrameBuffer() const
 {
-    return m_liveView.m_frameBuffer;
+    return m_liveView->m_frameBuffer;
 }
 
 int Camera::liveViewFrameBufferSize() const
 {
-    return m_liveView.c_frameBufferSize;
+    return m_liveView->c_frameBufferSize;
 }
 
-void Camera::grabLiveViewFrame()
+bool Camera::grabLiveViewFrame()
 {
     // skip frames if the camera isn't ready yet.
-    if (m_liveView.m_state != LiveView::On) {
-        fprintf(stderr, "WARNING: Skipping live view frame because camera is not in live view mode yet.\n");
-        return;
+    if (m_liveView->m_state != LiveView::On) {
+        *m_err << "Skipping live view frame because camera is not in live view mode";
+        if (m_liveView->m_state == LiveView::WaitingToStart)
+            *m_err << " yet";
+        pushErrMsg(Warning);
+        return false;
     }
 
-    EdsError err = EDS_ERR_OK;
-    EdsImageRef img;
+    EdsError err;
+    EdsImageRef img = NULL;
+
     // create image
-    err = err || EdsCreateEvfImageRef(m_liveView.m_streamPtr, &img);
+    err = EdsCreateEvfImageRef(m_liveView->m_streamPtr, &img);
     if (err) {
-        fprintf(stderr, "ERROR: Unable to create live view frame on the camera.\n");
-        return;
+        *m_err << "Unable to create live view frame on the camera: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Error);
+        return false;
+    }
+    if (! img) {
+        *m_err << "EDSDK didn't give us an image ref for live view frame";
+        pushErrMsg(Error);
+        return false;
     }
 
     // download the frame
-    err = err || EdsDownloadEvfImage(m_cam, img);
+    err = EdsDownloadEvfImage(m_cam, img);
 
     if (err == EDS_ERR_OBJECT_NOTREADY) {
         // skip the frame if the camera isn't ready
-        fprintf(stderr, "ERROR: skipping live view frame because camera isn't ready\n");
+        *m_err << "skipping live view frame because camera isn't ready";
+        pushErrMsg(Warning);
         EdsRelease(img);
-        return;
+        return false;
     } else if (err) {
         // skip the frame. unknown error
-        fprintf(stderr, "ERROR: skipping live view frame: %u\n", err);
+        *m_err << "skipping live view frame: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Error);
         EdsRelease(img);
-        return;
+        return false;
     }
 
     // get/set zoom ratio
     if (m_pendingZoomRatio) {
-        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio))
+        err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
+        if (err) {
+            *m_err << "Unable to set zoom ratio: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        } else {
             m_pendingZoomRatio = false;
+        }
     } else {
-        EdsGetPropertyData(img, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
+        err = EdsGetPropertyData(img, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
+        if (err) {
+            *m_err << "Unable to get zoom ratio: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        }
     }
 
     // get/set zoom position
     if (m_pendingZoomPosition) {
-        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_pendingZoomPoint))
+        err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_pendingZoomPoint);
+        if (err) {
+            *m_err << "Unable to set zoom position: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        } else {
             m_pendingZoomPosition = false;
+        }
     } else {
-        EdsGetPropertyData(img, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_zoomPosition);
+        err = EdsGetPropertyData(img, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_zoomPosition);
+        if (err) {
+            *m_err << "Unable to get zoom position: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        }
     }
 
     // set white balance
     if (m_pendingWhiteBalance) {
-        if (! EdsSetPropertyData(m_cam, kEdsPropID_Evf_WhiteBalance, 0, sizeof(EdsWhiteBalance), &m_whiteBalance))
+        err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_WhiteBalance, 0, sizeof(EdsWhiteBalance), &m_whiteBalance);
+        if (err) {
+            *m_err << "Unable to set white balance: " << ErrorMap::errorMsg(err);
+            pushErrMsg(Warning);
+        } else {
             m_pendingWhiteBalance = false;
+        }
     }
 
-    EdsRelease(img);
+    err = EdsRelease(img);
+    if (err) {
+        *m_err << "Unable to release live view frame: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+
+    return true;
 }
 
-void Camera::startLiveView()
+bool Camera::startLiveView()
 {
-    // it's kind of tricky to handle this, so we put it off for a TODO
-    assert(m_liveView.m_state != LiveView::WaitingToStop);
+    switch (m_liveView->m_state) {
+        case LiveView::Paused:
+            *m_err << "startLiveView(): Live view paused, will resume in a moment.";
+            pushErrMsg(Warning);
+            return true;
+        case LiveView::Off:
+            // tell the computer to send live data to the computer
+            EdsError err;
+            EdsUInt32 device;
+            err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
-    if (m_liveView.m_state == LiveView::WaitingToStart)
-        return;
+            if (err) {
+                *m_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+                pushErrMsg();
+                return false;
+            }
 
-    // tell the computer to send live data to the computer
-    EdsError err = EDS_ERR_OK;
-    EdsUInt32 device;
-    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-    device |= kEdsEvfOutputDevice_PC;
-    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+            device |= kEdsEvfOutputDevice_PC;
+            err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
-    if (err)
-        fprintf(stderr, "ERROR: Unable to turn on live view: %u\n", err);
-    else
-        m_liveView.m_state = LiveView::WaitingToStart;
+            if (err) {
+                *m_err << "Unable to turn on live view: " << ErrorMap::errorMsg(err);
+                pushErrMsg();
+            }
+
+            *m_err << "Requested live view to turn on.";
+            pushErrMsg(Debug);
+            m_liveView->m_state = LiveView::WaitingToStart;
+            m_liveView->m_desiredNewState = LiveView::On;
+            return true;
+        case LiveView::WaitingToStop:
+            *m_err << "Waiting for live view to end so we can start it again.";
+            pushErrMsg(Debug);
+            m_liveView->m_desiredNewState = LiveView::On;
+            return true;
+        case LiveView::WaitingToStart:
+            *m_err << "startLiveView(): already waiting to start live view.";
+            pushErrMsg(Warning);
+            m_liveView->m_desiredNewState = LiveView::On;
+            return true;
+        case LiveView::On:
+            *m_err << "startLiveView(): Live view already on";
+            pushErrMsg(Warning);
+            return true;
+    }
+    assert(false);
+    return false;
 }
 
-void Camera::stopLiveView()
+bool Camera::stopLiveView()
 {
-    // it's kind of tricky to handle this, so we put it off for a TODO
-    assert(m_liveView.m_state != LiveView::WaitingToStart);
+    switch (m_liveView->m_state) {
+        case LiveView::Paused:
+            *m_err << "stopLiveView(): Live view already paused";
+            pushErrMsg(Debug);
+            m_liveView->m_state = LiveView::Off;
+            return true;
+        case LiveView::Off:
+            *m_err << "stopLiveView(): Live view already off";
+            pushErrMsg(Debug);
+            return true;
+        case LiveView::WaitingToStop:
+        case LiveView::WaitingToStart:
+            m_liveView->m_desiredNewState = LiveView::Off;
+            return true;
+        case LiveView::On:
+            // tell the camera to stop sending live data to the computer
+            EdsError err = EDS_ERR_OK;
+            EdsUInt32 device;
+            err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
-    if (m_liveView.m_state == LiveView::WaitingToStop)
-        return;
+            if (err) {
+                *m_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+                pushErrMsg();
+                return false;
+            }
 
-    // tell the camera to stop sending live data to the computer
-    EdsError err = EDS_ERR_OK;
-    EdsUInt32 device;
-    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
-    device &= ~kEdsEvfOutputDevice_PC;
-    err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
+            device &= ~kEdsEvfOutputDevice_PC;
+            err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
-    if (err)
-        fprintf(stderr, "ERROR: Unable to turn off live view: %u\n", err);
-    else
-        m_liveView.m_state = LiveView::WaitingToStop;
+            if (err) {
+                *m_err << "Unable to turn off live view: " << ErrorMap::errorMsg(err);
+                pushErrMsg();
+                return false;
+            }
+
+            m_liveView->m_state = LiveView::WaitingToStop;
+            m_liveView->m_desiredNewState = LiveView::Off;
+            return true;
+    }
+    assert(false);
+    return false;
 }
 
 EdsSize Camera::liveViewImageSize() const
 {
-    return m_liveView.m_imageSize;
+    return m_liveView->m_imageSize;
 }
 
-void Camera::autoFocus()
+bool Camera::autoFocus()
 {
     EdsUInt32 off = (EdsUInt32) kEdsEvfDepthOfFieldPreview_OFF;
-    EdsError err = EDS_ERR_OK;
+    EdsError err;
 
     EdsUInt32 currentDepth;
-    err = err || EdsGetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &currentDepth);
+    err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &currentDepth);
     if (err) {
-        fprintf(stderr, "ERROR: Unable to get depth of field preview: %u\n", err);
-        return;
+        *m_err << "Unable to get depth of field preview: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
     if (currentDepth != kEdsEvfDepthOfFieldPreview_OFF) {
         // turn OFF depth of field preview
-        err = err || EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
+        err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
 
         if (err) {
-            fprintf(stderr, "ERROR: Unable to set depth of field preview: %u\n", err);
-            return;
+            *m_err << "Unable to set depth of field preview: " << ErrorMap::errorMsg(err);
+            pushErrMsg();
+            return false;
         }
     }
 
-    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
+    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
     if (err) {
-        fprintf(stderr, "ERROR: Unable to set camera to AF mode quick: %u\n", err);
-        return;
+        *m_err << "ERROR: Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
 
-    err = err || EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
+    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
     if (err) {
-        fprintf(stderr, "ERROR: Unable to set camera to AF mode live: %u\n", err);
-        return;
+        *m_err << "ERROR: Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
     }
+
+    return true;
 }
 
 void Camera::terminate()
 {
     EdsTerminateSDK();
+    s_initialized = false;
+}
+
+void Camera::pushErrMsg(ErrorLevel level)
+{
+    if (level >= m_errorLevel) {
+        ErrorMessage msg;
+        msg.level = level;
+        msg.msg = m_err->str();
+        m_errMsgQueue.push(msg);
+    }
+
+    delete m_err;
+    m_err = new stringstream;
+}
+
+int Camera::errMsgQueueSize() const
+{
+    return m_errMsgQueue.size();
+}
+
+Camera::ErrorMessage Camera::popErrMsg()
+{
+    if (errMsgQueueSize() == 0) {
+        return ErrorMessage();
+    } else {
+        ErrorMessage value = m_errMsgQueue.front();
+        m_errMsgQueue.pop();
+        return value;
+    }
+}
+
+void Camera::setErrorLevel(ErrorLevel level)
+{
+    m_errorLevel = level;
 }
