@@ -36,9 +36,6 @@ extern "C" {
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
     static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
     static PyObject * Camera_autoFocus(CameraObject * self, PyObject * args);
-    static PyObject * Camera_setErrorLevel(CameraObject * self, PyObject * args);
-    static PyObject * Camera_popErrMsg(CameraObject * self, PyObject * args);
-    static PyObject * Camera_errMsgQueueSize(CameraObject * self, PyObject * args);
     static PyMethodDef CameraMethods[] = {
         {"connect",             (PyCFunction)Camera_connect,             METH_VARARGS, "establish a session on the camera"},
         {"disconnect",          (PyCFunction)Camera_disconnect,          METH_VARARGS, "release the session with the camera"},
@@ -59,10 +56,6 @@ extern "C" {
         {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
         {"grabLiveViewFrame",   (PyCFunction)Camera_grabLiveViewFrame,   METH_VARARGS, "refresh the frame buffer with a new frame from the camera."},
-
-        {"setErrorLevel",       (PyCFunction)Camera_setErrorLevel,       METH_VARARGS, "set which error messages will be added to the queue"},
-        {"popErrMsg",           (PyCFunction)Camera_popErrMsg,           METH_VARARGS, "pops the oldest error message that was generated"},
-        {"errMsgQueueSize",     (PyCFunction)Camera_errMsgQueueSize,     METH_VARARGS, "returns the amount of error messages in the queue"},
 
         {NULL, NULL, 0, NULL} // sentinel
     };
@@ -296,37 +289,6 @@ extern "C" {
             Py_RETURN_FALSE;
     }
 
-    static PyObject * Camera_setErrorLevel(CameraObject * self, PyObject * args)
-    {
-        int level;
-
-        if (! PyArg_ParseTuple(args, "i", &level))
-            return NULL;
-
-        self->camera->setErrorLevel((Camera::ErrorLevel)level);
-
-        Py_RETURN_NONE;
-    }
-
-    static PyObject * Camera_popErrMsg(CameraObject * self, PyObject * args)
-    {
-        if (! PyArg_ParseTuple(args, ""))
-            return NULL;
-
-        Camera::ErrorMessage msg = self->camera->popErrMsg();
-
-        return Py_BuildValue("(i,s)", msg.level, msg.msg.c_str());
-    }
-
-    static PyObject * Camera_errMsgQueueSize(CameraObject * self, PyObject * args)
-    {
-        if (! PyArg_ParseTuple(args, ""))
-            return NULL;
-
-        int count = self->camera->errMsgQueueSize();
-
-        return Py_BuildValue("i", count);
-    }
 
     // -----
 
@@ -382,7 +344,6 @@ extern "C" {
 
     static PyObject * camera_terminate(PyObject * , PyObject * args)
     {
-
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
         
@@ -391,10 +352,46 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
+    static PyObject * camera_setErrorLevel(CameraObject * self, PyObject * args)
+    {
+        int level;
+
+        if (! PyArg_ParseTuple(args, "i", &level))
+            return NULL;
+
+        Camera::setErrorLevel((Camera::ErrorLevel)level);
+
+        Py_RETURN_NONE;
+    }
+
+    static PyObject * camera_popErrMsg(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        Camera::ErrorMessage msg = Camera::popErrMsg();
+
+        return Py_BuildValue("(i,s)", msg.level, msg.msg.c_str());
+    }
+
+    static PyObject * camera_errMsgQueueSize(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int count = Camera::errMsgQueueSize();
+
+        return Py_BuildValue("i", count);
+    }
+
+
     /* List of functions defined in the module */
     static PyMethodDef cameraMethods[] = {
-        {"getFirstCamera", camera_getFirstCamera, METH_VARARGS, "return a Camera object using the first camera we can find"},
-        {"terminate", camera_terminate, METH_VARARGS, "call EdsTerminateSDK and start over"},
+        {"getFirstCamera",      (PyCFunction)camera_getFirstCamera,      METH_VARARGS, "return a Camera object using the first camera we can find"},
+        {"terminate",           (PyCFunction)camera_terminate,           METH_VARARGS, "call EdsTerminateSDK and start over"},
+        {"setErrorLevel",       (PyCFunction)camera_setErrorLevel,       METH_VARARGS, "set which error messages will be added to the queue"},
+        {"popErrMsg",           (PyCFunction)camera_popErrMsg,           METH_VARARGS, "pops the oldest error message that was generated"},
+        {"errMsgQueueSize",     (PyCFunction)camera_errMsgQueueSize,     METH_VARARGS, "returns the amount of error messages in the queue"},
 
         {NULL, NULL, 0, NULL}       // sentinel
     };

@@ -49,7 +49,7 @@ class Camera
         static void terminate();
 
         // name of the camera model
-        string name();
+        string name() const;
 
         // takes a picture with the camera and puts it in outFile.
         // returns immediately but the picture won't be finished immediately.
@@ -78,7 +78,7 @@ class Camera
         void setZoomRatio(int zoomRatio);
 
         // white balance property
-        EdsWhiteBalance whiteBalance();
+        EdsWhiteBalance whiteBalance() const;
         void setWhiteBalance(EdsWhiteBalance whiteBalance);
 
         // get the oldest message from the event queue and remove it.
@@ -96,15 +96,19 @@ class Camera
 
         // sets the log level for error messages. messages are added to a
         // queue that you can access with popErrMsg()
-        void setErrorLevel(ErrorLevel level);
+        static void setErrorLevel(ErrorLevel level);
 
         // gets the oldest error message from the queue
-        ErrorMessage popErrMsg();
-        int errMsgQueueSize() const;
+        static ErrorMessage popErrMsg();
+        static int errMsgQueueSize();
 
     private: // variables
         static bool s_initialized;
         static bool s_staticDataInitialized;
+
+        static stringstream * s_err;
+        static queue<ErrorMessage> s_errMsgQueue;
+        static ErrorLevel s_errorLevel;
 
         class LiveView {
             public:
@@ -135,7 +139,7 @@ class Camera
             // the allocated space we have set aside for frame data
             unsigned char * m_frameBuffer;
 
-            LiveView(Camera * camera);
+            LiveView();
             ~LiveView();
         };
         LiveView * m_liveView;
@@ -152,12 +156,12 @@ class Camera
             EdsSize zoomBoxSize;
         };
 
+        static map<string, CameraModelData> s_modelData;
+
         struct TransferItem {
             EdsBaseRef sdkRef;
             string outFile;
         };
-
-        static map<string, CameraModelData> s_modelData;
 
         EdsCameraRef m_cam;
 
@@ -181,11 +185,7 @@ class Camera
 
         takePictureCompleteCallback m_pictureCompleteCallback;
 
-        stringstream * m_err;
-        queue<ErrorMessage> m_errMsgQueue;
-
         bool m_connected;
-        ErrorLevel m_errorLevel;
 
     private: // methods
         static void initialize();
@@ -212,7 +212,7 @@ class Camera
         bool pauseLiveView();
         bool resumeLiveView();
 
-        void pushErrMsg(ErrorLevel level = Error);
+        static void pushErrMsg(ErrorLevel level = Error);
 
     friend class LiveView;
 };

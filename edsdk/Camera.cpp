@@ -25,11 +25,17 @@ bool Camera::s_staticDataInitialized = false;
 
 map<string, Camera::CameraModelData> Camera::s_modelData;
 
+stringstream * Camera::s_err = NULL;
+queue<Camera::ErrorMessage> Camera::s_errMsgQueue;
+Camera::ErrorLevel Camera::s_errorLevel = Camera::None;
+
 void Camera::initialize()
 {
     if (s_initialized)
         return;
     s_initialized = true;
+
+    s_err = new stringstream;
 
     initStaticData();
     EdsInitializeSDK();
@@ -86,7 +92,7 @@ void Camera::initStaticData()
     s_modelData[c_cameraName_7D] = data7D;
 }
 
-Camera::LiveView::LiveView(Camera * camera) :
+Camera::LiveView::LiveView() :
     m_state(Off),
     m_streamPtr(NULL)
 {
@@ -98,8 +104,8 @@ Camera::LiveView::LiveView(Camera * camera) :
     EdsError err = EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
     
     if (err) {
-        *(camera->m_err) << "Unable to create memory stream for live view: " << ErrorMap::errorMsg(err);
-        camera->pushErrMsg(Camera::Error);
+        (*Camera::s_err) << "Unable to create memory stream for live view: " << ErrorMap::errorMsg(err);
+        Camera::pushErrMsg(Camera::Error);
     }
 }
 
@@ -110,15 +116,14 @@ Camera::LiveView::~LiveView()
 }
 
 Camera::Camera() :
-    m_liveView(NULL),
+    m_liveView(new LiveView()),
     m_pendingZoomPosition(false),
     m_zoomRatio(1),
     m_pendingZoomRatio(false),
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
     m_pictureCompleteCallback(NULL),
-    m_connected(false),
-    m_errorLevel(None)
+    m_connected(false)
 {
     m_zoomPosition.x = 0;
     m_zoomPosition.y = 0;
@@ -129,13 +134,11 @@ Camera::Camera() :
 Camera::~Camera()
 {
     disconnect();
+    delete m_liveView;
 }
 
 bool Camera::disconnect()
 {
-    delete m_liveView;
-    m_liveView = NULL;
-
     if (m_connected) {
         // release session
         EdsError err;
@@ -143,7 +146,7 @@ bool Camera::disconnect()
 
         bool success = true;
         if (err) {
-            *m_err << "Unable to close session: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to close session: " << ErrorMap::errorMsg(err);
             pushErrMsg();
             success = false;
         }
@@ -151,7 +154,7 @@ bool Camera::disconnect()
         err = EdsRelease(m_cam);
 
         if (err) {
-            *m_err << "Unable to deallocate session: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to deallocate session: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         }
 
@@ -172,13 +175,13 @@ Camera * Camera::getFirstCamera()
 
     err = EdsGetCameraList(&camList);
     if (err) {
-        *(cam->m_err) << "Unable to get camera list: " << ErrorMap::errorMsg(err);
+        *(cam->s_err) << "Unable to get camera list: " << ErrorMap::errorMsg(err);
         cam->pushErrMsg();
         delete cam;
         return NULL;
     }
     if (! camList) {
-        *(cam->m_err) << "EDSDK didn't give us a camera list ref.";
+        *(cam->s_err) << "EDSDK didn't give us a camera list ref.";
         cam->pushErrMsg();
         delete cam;
         return NULL;
@@ -188,7 +191,7 @@ Camera * Camera::getFirstCamera()
     err = EdsGetChildCount(camList, &camCount);
 
     if (err) {
-        *(cam->m_err) << "Unable to get camera count: " << ErrorMap::errorMsg(err);
+        *(cam->s_err) << "Unable to get camera count: " << ErrorMap::errorMsg(err);
         cam->pushErrMsg();
         EdsRelease(camList);
         delete cam;
@@ -196,7 +199,7 @@ Camera * Camera::getFirstCamera()
     }
 
     if (camCount == 0) {
-        *(cam->m_err) << "No camera connected.";
+        *(cam->s_err) << "No camera connected.";
         cam->pushErrMsg(Warning);
         EdsRelease(camList);
         delete cam;
@@ -208,7 +211,7 @@ Camera * Camera::getFirstCamera()
     err = EdsGetChildAtIndex(camList, 0, &camHandle);
 
     if (err) {
-        *(cam->m_err) << "Unable to get connected camera handle: " << ErrorMap::errorMsg(err);
+        *(cam->s_err) << "Unable to get connected camera handle: " << ErrorMap::errorMsg(err);
         cam->pushErrMsg(Error);
         EdsRelease(camList);
         delete cam;
@@ -220,7 +223,7 @@ Camera * Camera::getFirstCamera()
     err = EdsRelease(camList);
 
     if (err) {
-        *(cam->m_err) << "Unable to release camera list handle: " << ErrorMap::errorMsg(err);
+        *(cam->s_err) << "Unable to release camera list handle: " << ErrorMap::errorMsg(err);
         cam->pushErrMsg(Warning);
     }
 
@@ -240,16 +243,13 @@ Camera::CameraModelData Camera::cameraSpecificData()
 
 bool Camera::connect()
 {
-    delete m_liveView;
-    m_liveView = new LiveView(this);
-
     EdsError err;
 
     // open a session
     err = EdsOpenSession(m_cam);
 
     if (err) {
-        *m_err << "Unable to open session: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to open session: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -258,7 +258,7 @@ bool Camera::connect()
     err = EdsSetCameraStateEventHandler(m_cam, kEdsStateEvent_All, &staticStateEventHandler, this);
 
     if (err) {
-        *m_err << "Unable to set camera state event handler: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to set camera state event handler: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -266,7 +266,7 @@ bool Camera::connect()
     err = EdsSetObjectEventHandler(m_cam, kEdsObjectEvent_All, &staticObjectEventHandler, this);
 
     if (err) {
-        *m_err << "Unable to set object event handler: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to set object event handler: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -274,7 +274,7 @@ bool Camera::connect()
     err = EdsSetPropertyEventHandler(m_cam, kEdsPropertyEvent_All, &staticPropertyEventHandler, this);
 
     if (err) {
-        *m_err << "Unable to set property event handler: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to set property event handler: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -285,7 +285,7 @@ bool Camera::connect()
     err = EdsSetPropertyData(m_cam, kEdsPropID_SaveTo, 0, sizeof(EdsUInt32), &value);
 
     if (err) {
-        *m_err << "Unable to set property SaveTo device to computer: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to set property SaveTo device to computer: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -334,14 +334,14 @@ void Camera::objectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef)
     if (inEvent == kEdsObjectEvent_DirItemRequestTransfer) {
         transferOneItem(inRef, m_picOutFile);
     } else {
-        *m_err << "objectEventHandler: event " << inEvent;
+        *s_err << "objectEventHandler: event " << inEvent;
         pushErrMsg(Debug);
     }
 }
 
 void Camera::stateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData)
 {
-    *m_err << "stateEventHandler: event " << inEvent << ", parameter " << inEventData;
+    *s_err << "stateEventHandler: event " << inEvent << ", parameter " << inEventData;
     pushErrMsg(Debug);
 }
 
@@ -349,352 +349,352 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
 {
     switch (inPropertyID) {
 		case kEdsPropID_Unknown:
-            *m_err << "Incoming property event: Unknown";
+            *s_err << "Incoming property event: Unknown";
             pushErrMsg(Warning);
 			break;
 		case kEdsPropID_ProductName:
-            *m_err << "Incoming property event: ProductName";
+            *s_err << "Incoming property event: ProductName";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_BodyID:
-            *m_err << "Incoming property event: BodyID";
+            *s_err << "Incoming property event: BodyID";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_OwnerName:
-            *m_err << "Incoming property event: OwnerName";
+            *s_err << "Incoming property event: OwnerName";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_MakerName:
-            *m_err << "Incoming property event: MakerName";
+            *s_err << "Incoming property event: MakerName";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_DateTime:
-            *m_err << "Incoming property event: DateTime";
+            *s_err << "Incoming property event: DateTime";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FirmwareVersion:
-            *m_err << "Incoming property event: FirmwareVersion";
+            *s_err << "Incoming property event: FirmwareVersion";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_BatteryLevel:
-            *m_err << "Incoming property event: BatteryLevel";
+            *s_err << "Incoming property event: BatteryLevel";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_CFn:
-            *m_err << "Incoming property event: CFn";
+            *s_err << "Incoming property event: CFn";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_SaveTo:
-            *m_err << "Incoming property event: SaveTo";
+            *s_err << "Incoming property event: SaveTo";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_CurrentStorage:
-            *m_err << "Incoming property event: CurrentStorage";
+            *s_err << "Incoming property event: CurrentStorage";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_CurrentFolder:
-            *m_err << "Incoming property event: CurrentFolder";
+            *s_err << "Incoming property event: CurrentFolder";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_MyMenu:
-            *m_err << "Incoming property event: MyMenu";
+            *s_err << "Incoming property event: MyMenu";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_BatteryQuality:
-            *m_err << "Incoming property event: BatteryQuality";
+            *s_err << "Incoming property event: BatteryQuality";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_HDDirectoryStructure:
-            *m_err << "Incoming property event: HDDirectoryStructure";
+            *s_err << "Incoming property event: HDDirectoryStructure";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ImageQuality:
-            *m_err << "Incoming property event: ImageQuality";
+            *s_err << "Incoming property event: ImageQuality";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_JpegQuality:
-            *m_err << "Incoming property event: JpegQuality";
+            *s_err << "Incoming property event: JpegQuality";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Orientation:
-            *m_err << "Incoming property event: Orientation";
+            *s_err << "Incoming property event: Orientation";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ICCProfile:
-            *m_err << "Incoming property event: ICCProfile";
+            *s_err << "Incoming property event: ICCProfile";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FocusInfo:
-            *m_err << "Incoming property event: FocusInfo";
+            *s_err << "Incoming property event: FocusInfo";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_DigitalExposure:
-            *m_err << "Incoming property event: DigitalExposure";
+            *s_err << "Incoming property event: DigitalExposure";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_WhiteBalance:
-            *m_err << "Incoming property event: WhiteBalance";
+            *s_err << "Incoming property event: WhiteBalance";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ColorTemperature:
-            *m_err << "Incoming property event: ColorTemperature";
+            *s_err << "Incoming property event: ColorTemperature";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_WhiteBalanceShift:
-            *m_err << "Incoming property event: WhiteBalanceShift";
+            *s_err << "Incoming property event: WhiteBalanceShift";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Contrast:
-            *m_err << "Incoming property event: Contrast";
+            *s_err << "Incoming property event: Contrast";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ColorSaturation:
-            *m_err << "Incoming property event: ColorSaturation";
+            *s_err << "Incoming property event: ColorSaturation";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ColorTone:
-            *m_err << "Incoming property event: ColorTone";
+            *s_err << "Incoming property event: ColorTone";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Sharpness:
-            *m_err << "Incoming property event: Sharpness";
+            *s_err << "Incoming property event: Sharpness";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ColorSpace:
-            *m_err << "Incoming property event: ColorSpace";
+            *s_err << "Incoming property event: ColorSpace";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ToneCurve:
-            *m_err << "Incoming property event: ToneCurve";
+            *s_err << "Incoming property event: ToneCurve";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_PhotoEffect:
-            *m_err << "Incoming property event: PhotoEffect";
+            *s_err << "Incoming property event: PhotoEffect";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FilterEffect:
-            *m_err << "Incoming property event: FilterEffect";
+            *s_err << "Incoming property event: FilterEffect";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ToningEffect:
-            *m_err << "Incoming property event: ToningEffect";
+            *s_err << "Incoming property event: ToningEffect";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ParameterSet:
-            *m_err << "Incoming property event: ParameterSet";
+            *s_err << "Incoming property event: ParameterSet";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ColorMatrix:
-            *m_err << "Incoming property event: ColorMatrix";
+            *s_err << "Incoming property event: ColorMatrix";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_PictureStyle:
-            *m_err << "Incoming property event: PictureStyle";
+            *s_err << "Incoming property event: PictureStyle";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_PictureStyleDesc:
-            *m_err << "Incoming property event: PictureStyleDesc";
+            *s_err << "Incoming property event: PictureStyleDesc";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ETTL2Mode:
-            *m_err << "Incoming property event: ETTL2Mode";
+            *s_err << "Incoming property event: ETTL2Mode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_PictureStyleCaption:
-            *m_err << "Incoming property event: PictureStyleCaption";
+            *s_err << "Incoming property event: PictureStyleCaption";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Linear:
-            *m_err << "Incoming property event: Linear";
+            *s_err << "Incoming property event: Linear";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ClickWBPoint:
-            *m_err << "Incoming property event: ClickWBPoint";
+            *s_err << "Incoming property event: ClickWBPoint";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_WBCoeffs:
-            *m_err << "Incoming property event: WBCoeffs";
+            *s_err << "Incoming property event: WBCoeffs";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_GPSVersionID:
-            *m_err << "Incoming property event: GPSVersionID";
+            *s_err << "Incoming property event: GPSVersionID";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSLatitudeRef:
-            *m_err << "Incoming property event: GPSLatitudeRef";
+            *s_err << "Incoming property event: GPSLatitudeRef";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSLatitude:
-            *m_err << "Incoming property event: GPSLatitude";
+            *s_err << "Incoming property event: GPSLatitude";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSLongitudeRef:
-            *m_err << "Incoming property event: GPSLongitudeRef";
+            *s_err << "Incoming property event: GPSLongitudeRef";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSLongitude:
-            *m_err << "Incoming property event: GPSLongitude";
+            *s_err << "Incoming property event: GPSLongitude";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSAltitudeRef:
-            *m_err << "Incoming property event: GPSAltitudeRef";
+            *s_err << "Incoming property event: GPSAltitudeRef";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSAltitude:
-            *m_err << "Incoming property event: GPSAltitude";
+            *s_err << "Incoming property event: GPSAltitude";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSTimeStamp:
-            *m_err << "Incoming property event: GPSTimeStamp";
+            *s_err << "Incoming property event: GPSTimeStamp";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSSatellites:
-            *m_err << "Incoming property event: GPSSatellites";
+            *s_err << "Incoming property event: GPSSatellites";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSStatus:
-            *m_err << "Incoming property event: GPSStatus";
+            *s_err << "Incoming property event: GPSStatus";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSMapDatum:
-            *m_err << "Incoming property event: GPSMapDatum";
+            *s_err << "Incoming property event: GPSMapDatum";
             pushErrMsg(Debug);
 			break;
 		case    kEdsPropID_GPSDateStamp:
-            *m_err << "Incoming property event: GPSDateStamp";
+            *s_err << "Incoming property event: GPSDateStamp";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_AtCapture_Flag:
-            *m_err << "Incoming property event: AtCapture_Flag";
+            *s_err << "Incoming property event: AtCapture_Flag";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_AEMode:
-            *m_err << "Incoming property event: AEMode";
+            *s_err << "Incoming property event: AEMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_DriveMode:
-            *m_err << "Incoming property event: DriveMode";
+            *s_err << "Incoming property event: DriveMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ISOSpeed:
-            *m_err << "Incoming property event: ISOSpeed";
+            *s_err << "Incoming property event: ISOSpeed";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_MeteringMode:
-            *m_err << "Incoming property event: MeteringMode";
+            *s_err << "Incoming property event: MeteringMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_AFMode:
-            *m_err << "Incoming property event: AFMode";
+            *s_err << "Incoming property event: AFMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Av:
-            *m_err << "Incoming property event: Av";
+            *s_err << "Incoming property event: Av";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Tv:
-            *m_err << "Incoming property event: Tv";
+            *s_err << "Incoming property event: Tv";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ExposureCompensation:
-            *m_err << "Incoming property event: ExposureCompensation";
+            *s_err << "Incoming property event: ExposureCompensation";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FlashCompensation:
-            *m_err << "Incoming property event: FlashCompensation";
+            *s_err << "Incoming property event: FlashCompensation";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FocalLength:
-            *m_err << "Incoming property event: FocalLength";
+            *s_err << "Incoming property event: FocalLength";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_AvailableShots:
-            *m_err << "Incoming property event: AvailableShots";
+            *s_err << "Incoming property event: AvailableShots";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Bracket:
-            *m_err << "Incoming property event: Bracket";
+            *s_err << "Incoming property event: Bracket";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_WhiteBalanceBracket:
-            *m_err << "Incoming property event: WhiteBalancingBracket";
+            *s_err << "Incoming property event: WhiteBalancingBracket";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_LensName:
-            *m_err << "Incoming property event: LensName";
+            *s_err << "Incoming property event: LensName";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_AEBracket:
-            *m_err << "Incoming property event: AEBracket";
+            *s_err << "Incoming property event: AEBracket";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FEBracket:
-            *m_err << "Incoming property event: FEBracket";
+            *s_err << "Incoming property event: FEBracket";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_ISOBracket:
-            *m_err << "Incoming property event: ISOBracket";
+            *s_err << "Incoming property event: ISOBracket";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_NoiseReduction:
-            *m_err << "Incoming property event: NoiseReduction";
+            *s_err << "Incoming property event: NoiseReduction";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FlashOn:
-            *m_err << "Incoming property event: FlashOn";
+            *s_err << "Incoming property event: FlashOn";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_RedEye:
-            *m_err << "Incoming property event: RedEye";
+            *s_err << "Incoming property event: RedEye";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_FlashMode:
-            *m_err << "Incoming property event: FlashMode";
+            *s_err << "Incoming property event: FlashMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_LensStatus:
-            *m_err << "Incoming property event: LensStatus";
+            *s_err << "Incoming property event: LensStatus";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Artist:
-            *m_err << "Incoming property event: Artist";
+            *s_err << "Incoming property event: Artist";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Copyright:
-            *m_err << "Incoming property event: Copyright";
+            *s_err << "Incoming property event: Copyright";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_DepthOfField:
-            *m_err << "Incoming property event: DepthOfField";
+            *s_err << "Incoming property event: DepthOfField";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_EFCompensation:
-            *m_err << "Incoming property event: EFCompensation";
+            *s_err << "Incoming property event: EFCompensation";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_OutputDevice:
             if (inParam == kEdsEvfOutputDevice_PC) {
-                *m_err << "notice from camera: we are now in live view mode.";
+                *s_err << "notice from camera: we are now in live view mode.";
                 pushErrMsg(Debug);
             } else if (inParam == kEdsEvfOutputDevice_TFT) {
-                *m_err << "notice from camera: we are no longer in live view mode.";
+                *s_err << "notice from camera: we are no longer in live view mode.";
                 pushErrMsg(Debug);
             } else {
                 // should not get here
-                *m_err << "notice from camera: we are now in WTF mode.";
+                *s_err << "notice from camera: we are now in WTF mode.";
                 pushErrMsg(Warning);
             }
             switch (m_liveView->m_state) {
                 case LiveView::Off:
-                    *m_err << "live view changed but we didn't expect it to. live view should be off";
+                    *s_err << "live view changed but we didn't expect it to. live view should be off";
                     pushErrMsg(Warning);
                     break;
                 case LiveView::On:
-                    *m_err << "live view changed but we didn't expect it to. live view should be on";
+                    *s_err << "live view changed but we didn't expect it to. live view should be on";
                     pushErrMsg(Warning);
                     break;
                 case LiveView::Paused:
-                    *m_err << "live view changed but we didn't expect it to. live view should be paused";
+                    *s_err << "live view changed but we didn't expect it to. live view should be paused";
                     pushErrMsg(Warning);
                     break;
                 case LiveView::WaitingToStart:
@@ -730,51 +730,51 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
             }
             break;
 		case kEdsPropID_Evf_Mode:
-            *m_err << "Incoming property event: EvfMode";
+            *s_err << "Incoming property event: EvfMode";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_WhiteBalance:
-            *m_err << "Incoming property event: WhiteBalance";
+            *s_err << "Incoming property event: WhiteBalance";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_ColorTemperature:
-            *m_err << "Incoming property event: ColorTemperature";
+            *s_err << "Incoming property event: ColorTemperature";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_DepthOfFieldPreview:
-            *m_err << "Incoming property event: DepthOfFieldPreview";
+            *s_err << "Incoming property event: DepthOfFieldPreview";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_Zoom:
-            *m_err << "Incoming property event: Zoom";
+            *s_err << "Incoming property event: Zoom";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_ZoomPosition:
-            *m_err << "Incoming property event: ZoomPosition";
+            *s_err << "Incoming property event: ZoomPosition";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_FocusAid:
-            *m_err << "Incoming property event: FocusAid";
+            *s_err << "Incoming property event: FocusAid";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_Histogram:
-            *m_err << "Incoming property event: Histogram";
+            *s_err << "Incoming property event: Histogram";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_ImagePosition:
-            *m_err << "Incoming property event: ImagePosition";
+            *s_err << "Incoming property event: ImagePosition";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_HistogramStatus:
-            *m_err << "Incoming property event: HistogramStatus";
+            *s_err << "Incoming property event: HistogramStatus";
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_AFMode:
-            *m_err << "Incoming property event: AFMode";
+            *s_err << "Incoming property event: AFMode";
             pushErrMsg(Debug);
 			break;
         default:
-            *m_err << "Unrecognized prop id: " << inPropertyID;
+            *s_err << "Unrecognized prop id: " << inPropertyID;
             pushErrMsg(Warning);
             assert(false);
     }
@@ -791,7 +791,7 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = EdsGetDirectoryItemInfo(inRef, &dirItemInfo);
 
     if (err) {
-        *m_err << "Unable to get directory item info: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to get directory item info: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -804,13 +804,13 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = EdsCreateFileStream(tmpfile.c_str(), kEdsFileCreateDisposition_CreateAlways, kEdsAccess_ReadWrite, &outStream);
 
     if (err) {
-        *m_err << "Unable to create file stream: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to create file stream: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
 
     if (! outStream) {
-        *m_err << "Create file stream didn't allocate a stream for us.";
+        *s_err << "Create file stream didn't allocate a stream for us.";
         pushErrMsg();
         return false;
     }
@@ -819,7 +819,7 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = EdsDownload(inRef, dirItemInfo.size, outStream);
  
     if (err) {
-        *m_err << "Unable to download picture: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to download picture: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         EdsRelease(outStream);
         return false;
@@ -828,7 +828,7 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = EdsDownloadComplete(inRef);
 
     if (err) {
-        *m_err << "Unable to finish downloading picture: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to finish downloading picture: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         EdsRelease(outStream);
         return false;
@@ -838,7 +838,7 @@ bool Camera::transferOneItem(EdsBaseRef inRef, string outfile)
     err = EdsRelease(outStream);
 
     if (err) {
-        *m_err << "Unable to release out stream after downloading: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to release out stream after downloading: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
 
@@ -910,7 +910,7 @@ bool Camera::setComputerCapabilities()
     EdsError err = EdsSetCapacity(m_cam, caps);
 
     if (err) {
-        *m_err << "Unable to set computer capabilities: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to set computer capabilities: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -930,11 +930,11 @@ bool Camera::takeSinglePicture(string outFile)
     EdsError err = EdsSendCommand(m_cam, kEdsCameraCommand_TakePicture, 0);
 
     if (err == EDS_ERR_OBJECT_NOTREADY) {
-        *m_err << "unable to take picture, camera not ready";
+        *s_err << "unable to take picture, camera not ready";
         pushErrMsg(Warning);
         return false;
     } else if (err) {
-        *m_err << "unable to take picture: " << ErrorMap::errorMsg(err);
+        *s_err << "unable to take picture: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -964,28 +964,29 @@ void Camera::setZoomRatio(int zoomRatio)
     m_pendingZoomRatio = true;
 }
 
-EdsWhiteBalance Camera::whiteBalance()
+EdsWhiteBalance Camera::whiteBalance() const
 {
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_WhiteBalance, 0, sizeof(m_whiteBalance), (EdsVoid *) &m_whiteBalance);
     if (err) {
-        *m_err << "Unable to get white balance: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to get white balance: " << ErrorMap::errorMsg(err);
         pushErrMsg();
     }
     return m_whiteBalance;
 }
-void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
+
+void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance) 
 {
     m_whiteBalance = whiteBalance;
     m_pendingWhiteBalance = true;
 }
 
-string Camera::name()
+string Camera::name() const
 {
     EdsDeviceInfo deviceInfo;
     EdsError err = EdsGetDeviceInfo(m_cam, &deviceInfo);
 
     if (err) {
-        *m_err << "Unable to get device info: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to get device info: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return string();
     }
@@ -1028,9 +1029,9 @@ bool Camera::grabLiveViewFrame()
 {
     // skip frames if the camera isn't ready yet.
     if (m_liveView->m_state != LiveView::On) {
-        *m_err << "Skipping live view frame because camera is not in live view mode";
+        *s_err << "Skipping live view frame because camera is not in live view mode";
         if (m_liveView->m_state == LiveView::WaitingToStart)
-            *m_err << " yet";
+            *s_err << " yet";
         pushErrMsg(Warning);
         return false;
     }
@@ -1041,12 +1042,12 @@ bool Camera::grabLiveViewFrame()
     // create image
     err = EdsCreateEvfImageRef(m_liveView->m_streamPtr, &img);
     if (err) {
-        *m_err << "Unable to create live view frame on the camera: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to create live view frame on the camera: " << ErrorMap::errorMsg(err);
         pushErrMsg(Error);
         return false;
     }
     if (! img) {
-        *m_err << "EDSDK didn't give us an image ref for live view frame";
+        *s_err << "EDSDK didn't give us an image ref for live view frame";
         pushErrMsg(Error);
         return false;
     }
@@ -1056,13 +1057,13 @@ bool Camera::grabLiveViewFrame()
 
     if (err == EDS_ERR_OBJECT_NOTREADY) {
         // skip the frame if the camera isn't ready
-        *m_err << "skipping live view frame because camera isn't ready";
+        *s_err << "skipping live view frame because camera isn't ready";
         pushErrMsg(Warning);
         EdsRelease(img);
         return false;
     } else if (err) {
         // skip the frame. unknown error
-        *m_err << "skipping live view frame: " << ErrorMap::errorMsg(err);
+        *s_err << "skipping live view frame: " << ErrorMap::errorMsg(err);
         pushErrMsg(Error);
         EdsRelease(img);
         return false;
@@ -1072,7 +1073,7 @@ bool Camera::grabLiveViewFrame()
     if (m_pendingZoomRatio) {
         err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
         if (err) {
-            *m_err << "Unable to set zoom ratio: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to set zoom ratio: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         } else {
             m_pendingZoomRatio = false;
@@ -1080,7 +1081,7 @@ bool Camera::grabLiveViewFrame()
     } else {
         err = EdsGetPropertyData(img, kEdsPropID_Evf_Zoom, 0, sizeof(EdsUInt32), &m_zoomRatio);
         if (err) {
-            *m_err << "Unable to get zoom ratio: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to get zoom ratio: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         }
     }
@@ -1089,7 +1090,7 @@ bool Camera::grabLiveViewFrame()
     if (m_pendingZoomPosition) {
         err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_pendingZoomPoint);
         if (err) {
-            *m_err << "Unable to set zoom position: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to set zoom position: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         } else {
             m_pendingZoomPosition = false;
@@ -1097,7 +1098,7 @@ bool Camera::grabLiveViewFrame()
     } else {
         err = EdsGetPropertyData(img, kEdsPropID_Evf_ZoomPosition, 0, sizeof(EdsPoint), &m_zoomPosition);
         if (err) {
-            *m_err << "Unable to get zoom position: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to get zoom position: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         }
     }
@@ -1106,7 +1107,7 @@ bool Camera::grabLiveViewFrame()
     if (m_pendingWhiteBalance) {
         err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_WhiteBalance, 0, sizeof(EdsWhiteBalance), &m_whiteBalance);
         if (err) {
-            *m_err << "Unable to set white balance: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to set white balance: " << ErrorMap::errorMsg(err);
             pushErrMsg(Warning);
         } else {
             m_pendingWhiteBalance = false;
@@ -1115,7 +1116,7 @@ bool Camera::grabLiveViewFrame()
 
     err = EdsRelease(img);
     if (err) {
-        *m_err << "Unable to release live view frame: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to release live view frame: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
 
@@ -1126,7 +1127,7 @@ bool Camera::startLiveView()
 {
     switch (m_liveView->m_state) {
         case LiveView::Paused:
-            *m_err << "startLiveView(): Live view paused, will resume in a moment.";
+            *s_err << "startLiveView(): Live view paused, will resume in a moment.";
             pushErrMsg(Warning);
             return true;
         case LiveView::Off:
@@ -1136,7 +1137,7 @@ bool Camera::startLiveView()
             err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
             if (err) {
-                *m_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+                *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
                 pushErrMsg();
                 return false;
             }
@@ -1145,27 +1146,27 @@ bool Camera::startLiveView()
             err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
             if (err) {
-                *m_err << "Unable to turn on live view: " << ErrorMap::errorMsg(err);
+                *s_err << "Unable to turn on live view: " << ErrorMap::errorMsg(err);
                 pushErrMsg();
             }
 
-            *m_err << "Requested live view to turn on.";
+            *s_err << "Requested live view to turn on.";
             pushErrMsg(Debug);
             m_liveView->m_state = LiveView::WaitingToStart;
             m_liveView->m_desiredNewState = LiveView::On;
             return true;
         case LiveView::WaitingToStop:
-            *m_err << "Waiting for live view to end so we can start it again.";
+            *s_err << "Waiting for live view to end so we can start it again.";
             pushErrMsg(Debug);
             m_liveView->m_desiredNewState = LiveView::On;
             return true;
         case LiveView::WaitingToStart:
-            *m_err << "startLiveView(): already waiting to start live view.";
+            *s_err << "startLiveView(): already waiting to start live view.";
             pushErrMsg(Warning);
             m_liveView->m_desiredNewState = LiveView::On;
             return true;
         case LiveView::On:
-            *m_err << "startLiveView(): Live view already on";
+            *s_err << "startLiveView(): Live view already on";
             pushErrMsg(Warning);
             return true;
     }
@@ -1177,12 +1178,12 @@ bool Camera::stopLiveView()
 {
     switch (m_liveView->m_state) {
         case LiveView::Paused:
-            *m_err << "stopLiveView(): Live view already paused";
+            *s_err << "stopLiveView(): Live view already paused";
             pushErrMsg(Debug);
             m_liveView->m_state = LiveView::Off;
             return true;
         case LiveView::Off:
-            *m_err << "stopLiveView(): Live view already off";
+            *s_err << "stopLiveView(): Live view already off";
             pushErrMsg(Debug);
             return true;
         case LiveView::WaitingToStop:
@@ -1196,7 +1197,7 @@ bool Camera::stopLiveView()
             err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
             if (err) {
-                *m_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
+                *s_err << "Unable to get live view output device: " << ErrorMap::errorMsg(err);
                 pushErrMsg();
                 return false;
             }
@@ -1205,7 +1206,7 @@ bool Camera::stopLiveView()
             err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_OutputDevice, 0, sizeof(EdsUInt32), &device);
 
             if (err) {
-                *m_err << "Unable to turn off live view: " << ErrorMap::errorMsg(err);
+                *s_err << "Unable to turn off live view: " << ErrorMap::errorMsg(err);
                 pushErrMsg();
                 return false;
             }
@@ -1231,7 +1232,7 @@ bool Camera::autoFocus()
     EdsUInt32 currentDepth;
     err = EdsGetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &currentDepth);
     if (err) {
-        *m_err << "Unable to get depth of field preview: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to get depth of field preview: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -1240,7 +1241,7 @@ bool Camera::autoFocus()
         err = EdsSetPropertyData(m_cam, kEdsPropID_Evf_DepthOfFieldPreview, 0, sizeof(EdsUInt32), &off);
 
         if (err) {
-            *m_err << "Unable to set depth of field preview: " << ErrorMap::errorMsg(err);
+            *s_err << "Unable to set depth of field preview: " << ErrorMap::errorMsg(err);
             pushErrMsg();
             return false;
         }
@@ -1248,14 +1249,14 @@ bool Camera::autoFocus()
 
     err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
     if (err) {
-        *m_err << "ERROR: Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
+        *s_err << "ERROR: Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
 
     err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
     if (err) {
-        *m_err << "ERROR: Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
+        *s_err << "ERROR: Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
@@ -1265,26 +1266,27 @@ bool Camera::autoFocus()
 
 void Camera::terminate()
 {
+    delete s_err;
     EdsTerminateSDK();
     s_initialized = false;
 }
 
 void Camera::pushErrMsg(ErrorLevel level)
 {
-    if (level >= m_errorLevel) {
+    if (level >= s_errorLevel) {
         ErrorMessage msg;
         msg.level = level;
-        msg.msg = m_err->str();
-        m_errMsgQueue.push(msg);
+        msg.msg = s_err->str();
+        s_errMsgQueue.push(msg);
     }
 
-    delete m_err;
-    m_err = new stringstream;
+    delete s_err;
+    s_err = new stringstream;
 }
 
-int Camera::errMsgQueueSize() const
+int Camera::errMsgQueueSize()
 {
-    return m_errMsgQueue.size();
+    return s_errMsgQueue.size();
 }
 
 Camera::ErrorMessage Camera::popErrMsg()
@@ -1292,13 +1294,13 @@ Camera::ErrorMessage Camera::popErrMsg()
     if (errMsgQueueSize() == 0) {
         return ErrorMessage();
     } else {
-        ErrorMessage value = m_errMsgQueue.front();
-        m_errMsgQueue.pop();
+        ErrorMessage value = s_errMsgQueue.front();
+        s_errMsgQueue.pop();
         return value;
     }
 }
 
 void Camera::setErrorLevel(ErrorLevel level)
 {
-    m_errorLevel = level;
+    s_errorLevel = level;
 }

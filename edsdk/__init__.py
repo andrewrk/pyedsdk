@@ -133,6 +133,9 @@ class ErrorLevel:
     Error = 2
     NoMessages = 3
 
+def setErrorLevel(level):
+    CppCamera.setErrorLevel(level)
+
 def getFirstCamera():
     return Camera(CppCamera.getFirstCamera())
 
