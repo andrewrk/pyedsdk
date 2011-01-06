@@ -673,18 +673,20 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
             pushErrMsg(Debug);
 			break;
 		case kEdsPropID_Evf_OutputDevice:
+            // we have experimentally determined that the inParam for this
+            // property is completely bogus. EDSDK 2.7
             if (inParam == kEdsEvfOutputDevice_PC) {
-                *s_err << "notice from camera: output device PC (live mode).";
+                *s_err << "bogus notice from camera: output device PC (live mode).";
                 pushErrMsg(Debug);
             } else if (inParam == kEdsEvfOutputDevice_TFT) {
-                *s_err << "notice from camera: output device TFT (live mode).";
+                *s_err << "bogus notice from camera: output device TFT (live mode).";
                 pushErrMsg(Warning);
             } else if (inParam == 0) {
-                *s_err << "notice from camera: we are no longer in live view mode.";
+                *s_err << "bogus notice from camera: we are no longer in live view mode.";
                 pushErrMsg(Debug);
             } else {
                 // should not get here
-                *s_err << "notice from camera: live view now in WTF mode: " << inParam;
+                *s_err << "bogus notice from camera: live view now in WTF mode: " << inParam;
                 pushErrMsg(Warning);
             }
             switch (m_liveView->m_state) {
@@ -701,43 +703,33 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
                     pushErrMsg(Warning);
                     break;
                 case LiveView::WaitingToStart:
-                    if (inParam == kEdsEvfOutputDevice_PC) {
-                        m_liveView->m_state = LiveView::On;
-                        switch (m_liveView->m_desiredNewState) {
-                            case LiveView::Off:
-                                stopLiveView();
-                                break;
-                            case LiveView::On:
-                                break;
-                            case LiveView::Paused:
-                                pauseLiveView();
-                                break;
-                            default:
-                                assert(false);
-                        }
-                    } else {
-                        *s_err << "we expected live view to turn on, but it didn't. maybe it will later?";
-                        pushErrMsg(Warning);
+                    m_liveView->m_state = LiveView::On;
+                    switch (m_liveView->m_desiredNewState) {
+                        case LiveView::Off:
+                            stopLiveView();
+                            break;
+                        case LiveView::On:
+                            break;
+                        case LiveView::Paused:
+                            pauseLiveView();
+                            break;
+                        default:
+                            assert(false);
                     }
                     break;
                 case LiveView::WaitingToStop:
-                    if (inParam == 0) {
-                        m_liveView->m_state = LiveView::Off;
-                        switch (m_liveView->m_desiredNewState) {
-                            case LiveView::Off:
-                                break;
-                            case LiveView::On:
-                                startLiveView();
-                                break;
-                            case LiveView::Paused:
-                                m_liveView->m_state = LiveView::Paused;
-                                break;
-                            default:
-                                assert(false);
-                        }
-                    } else {
-                        *s_err << "we expected live view to turn off, but it didn't. maybe it will later?";
-                        pushErrMsg(Warning);
+                    m_liveView->m_state = LiveView::Off;
+                    switch (m_liveView->m_desiredNewState) {
+                        case LiveView::Off:
+                            break;
+                        case LiveView::On:
+                            startLiveView();
+                            break;
+                        case LiveView::Paused:
+                            m_liveView->m_state = LiveView::Paused;
+                            break;
+                        default:
+                            assert(false);
                     }
                     break;
             }
