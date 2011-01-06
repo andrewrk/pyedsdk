@@ -3,12 +3,14 @@ import threading, time
 
 __version__ = '0.4'
 
+_errorMessageCallback = None
+
 class Camera:
     def _checkPictureQueue(self):
         while self._running:
             while self._camera.pictureDoneQueueSize() > 0:
                 pic = self._camera.popPictureDoneQueue()
-                self.flushErrors()
+                _flushErrors()
                 if self._pictureCompleteCallback:
                     self._pictureCompleteCallback(pic)
             time.sleep(0.10)
@@ -16,7 +18,6 @@ class Camera:
     def __init__(self, cpp_camera):
         self._camera = cpp_camera
         self._pictureCompleteCallback = None
-        self._errorMessageCallback = None
         self._liveViewOn = False
 
         # threads
@@ -30,14 +31,24 @@ class Camera:
         self._running = False
         self._pictureThread.join()
 
+    def connect(self):
+        value = self._camera.connect();
+        _flushErrors()
+        return value
+
+    def disconnect(self):
+        value = self._camera.disconnect();
+        _flushErrors()
+        return value
+
     def name(self):
         value = self._camera.name()
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def takePicture(self, filename):
         value = self._camera.takeSinglePicture(filename)
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def setPictureCompleteCallback(self, callback):
@@ -46,20 +57,14 @@ class Camera:
         """
         self._pictureCompleteCallback = callback
 
-    def setErrorMessageCallback(self, callback):
-        """
-        callback(level, message) will be called when there is an error message
-        """
-        self._errorMessageCallback = callback
-
     def startLiveView(self):
         self._liveViewOn = self._camera.startLiveView()
-        self.flushErrors()
+        _flushErrors()
         return self._liveViewOn
 
     def stopLiveView(self):
         success = self._camera.stopLiveView()
-        self.flushErrors()
+        _flushErrors()
         if success:
             self._liveViewOn = False
         return not self._liveViewOn
@@ -72,7 +77,7 @@ class Camera:
         if not self._liveViewOn:
             self.startLiveView()
         self._camera.grabLiveViewFrame()
-        self.flushErrors()
+        _flushErrors()
 
     def liveViewMemoryView(self):
         """
@@ -83,49 +88,43 @@ class Camera:
 
     def liveViewImageSize(self):
         value = self._camera.liveViewImageSize()
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def zoomPosition(self):
         value = self._camera.zoomPosition()
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def setZoomPosition(self, x, y):
         value = self._camera.setZoomPosition(x, y)
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def zoomRatio(self):
         value = self._camera.zoomRatio()
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def setZoomRatio(self, factor):
         value = self._camera.setZoomRatio(factor)
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def whiteBalance(self):
         value = self._camera.whiteBalance()
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def setWhiteBalance(self, white_balance):
         value = self._camera.setWhiteBalance(white_balance)
-        self.flushErrors()
+        _flushErrors()
         return value
 
     def autoFocus(self):
         value = self._camera.autoFocus()
-        self.flushErrors()
+        _flushErrors()
         return value
-
-    def flushErrors(self):
-        while self._camera.errMsgQueueSize() > 0:
-            level, msg = self._camera.popErrMsg()
-            if self._errorMessageCallback:
-                self._errorMessageCallback(level, msg)
 
 class ErrorLevel:
     Debug = 0
@@ -133,11 +132,27 @@ class ErrorLevel:
     Error = 2
     NoMessages = 3
 
+def setErrorMessageCallback(callback):
+    """
+    callback(level, message) will be called when there is an error message
+    """
+    global _errorMessageCallback
+    _errorMessageCallback = callback
+
 def setErrorLevel(level):
     CppCamera.setErrorLevel(level)
 
+def _flushErrors():
+    while CppCamera.errMsgQueueSize() > 0:
+        level, msg = CppCamera.popErrMsg()
+        if _errorMessageCallback is not None:
+            _errorMessageCallback(level, msg)
+
 def getFirstCamera():
-    return Camera(CppCamera.getFirstCamera())
+    cam = Camera(CppCamera.getFirstCamera())
+    if cam is not None and cam.connect():
+        return cam
+    return None
 
 def getFakeCamera(placeHolderImagePath):
     class FakeCamera:

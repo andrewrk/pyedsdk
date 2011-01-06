@@ -674,14 +674,17 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
 			break;
 		case kEdsPropID_Evf_OutputDevice:
             if (inParam == kEdsEvfOutputDevice_PC) {
-                *s_err << "notice from camera: we are now in live view mode.";
+                *s_err << "notice from camera: output device PC (live mode).";
                 pushErrMsg(Debug);
             } else if (inParam == kEdsEvfOutputDevice_TFT) {
+                *s_err << "notice from camera: output device TFT (live mode).";
+                pushErrMsg(Warning);
+            } else if (inParam == 0) {
                 *s_err << "notice from camera: we are no longer in live view mode.";
                 pushErrMsg(Debug);
             } else {
                 // should not get here
-                *s_err << "notice from camera: we are now in WTF mode.";
+                *s_err << "notice from camera: live view now in WTF mode: " << inParam;
                 pushErrMsg(Warning);
             }
             switch (m_liveView->m_state) {
@@ -698,33 +701,43 @@ void Camera::propertyEventHandler(EdsPropertyEvent inEvent, EdsPropertyID inProp
                     pushErrMsg(Warning);
                     break;
                 case LiveView::WaitingToStart:
-                    m_liveView->m_state = LiveView::On;
-                    switch (m_liveView->m_desiredNewState) {
-                        case LiveView::Off:
-                            stopLiveView();
-                            break;
-                        case LiveView::On:
-                            break;
-                        case LiveView::Paused:
-                            pauseLiveView();
-                            break;
-                        default:
-                            assert(false);
+                    if (inParam == kEdsEvfOutputDevice_PC) {
+                        m_liveView->m_state = LiveView::On;
+                        switch (m_liveView->m_desiredNewState) {
+                            case LiveView::Off:
+                                stopLiveView();
+                                break;
+                            case LiveView::On:
+                                break;
+                            case LiveView::Paused:
+                                pauseLiveView();
+                                break;
+                            default:
+                                assert(false);
+                        }
+                    } else {
+                        *s_err << "we expected live view to turn on, but it didn't. maybe it will later?";
+                        pushErrMsg(Warning);
                     }
                     break;
                 case LiveView::WaitingToStop:
-                    m_liveView->m_state = LiveView::Off;
-                    switch (m_liveView->m_desiredNewState) {
-                        case LiveView::Off:
-                            break;
-                        case LiveView::On:
-                            startLiveView();
-                            break;
-                        case LiveView::Paused:
-                            m_liveView->m_state = LiveView::Paused;
-                            break;
-                        default:
-                            assert(false);
+                    if (inParam == 0) {
+                        m_liveView->m_state = LiveView::Off;
+                        switch (m_liveView->m_desiredNewState) {
+                            case LiveView::Off:
+                                break;
+                            case LiveView::On:
+                                startLiveView();
+                                break;
+                            case LiveView::Paused:
+                                m_liveView->m_state = LiveView::Paused;
+                                break;
+                            default:
+                                assert(false);
+                        }
+                    } else {
+                        *s_err << "we expected live view to turn off, but it didn't. maybe it will later?";
+                        pushErrMsg(Warning);
                     }
                     break;
             }
