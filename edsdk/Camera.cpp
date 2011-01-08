@@ -1060,7 +1060,7 @@ Camera::AFMode Camera::afMode() const
         *s_err << "Unable to get drive mode: " << ErrorMap::errorMsg(err);
         pushErrMsg();
     }
-    return (DriveMode) mode;
+    return (AFMode) mode;
 }
 
 void Camera::setAFMode(AFMode mode)
