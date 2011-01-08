@@ -123,7 +123,8 @@ Camera::Camera() :
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
     m_pictureCompleteCallback(NULL),
-    m_connected(false)
+    m_connected(false),
+    m_cameraData(NULL)
 {
     m_zoomPosition.x = 0;
     m_zoomPosition.y = 0;
@@ -230,15 +231,9 @@ Camera * Camera::getFirstCamera()
     return cam;
 }
 
-Camera::CameraModelData Camera::cameraSpecificData()
+const Camera::CameraModelData * Camera::cameraSpecificData() const
 {
-    string myName = name();
-
-    if (s_modelData.count(myName) > 0)
-        return s_modelData[myName];
-
-    // default to 40D
-    return s_modelData[c_cameraName_40D];
+    return m_cameraData;
 }
 
 bool Camera::connect()
@@ -288,6 +283,17 @@ bool Camera::connect()
         *s_err << "Unable to set property SaveTo device to computer: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
+    }
+
+    m_name = getName();
+
+    if (s_modelData.count(m_name) > 0) {
+        m_cameraData = &s_modelData[m_name];
+    } else {
+        *s_err << "Unrecognized camera model: " << m_name;
+        pushErrMsg(Warning);
+        // default to 7D
+        return &s_modelData[c_cameraName_7D];
     }
 
     return true;
@@ -1073,7 +1079,7 @@ void Camera::setAFMode(AFMode mode)
     }
 }
 
-string Camera::name() const
+string Camera::getName() const
 {
     EdsDeviceInfo deviceInfo;
     EdsError err = EdsGetDeviceInfo(m_cam, &deviceInfo);
@@ -1326,11 +1332,6 @@ bool Camera::_stopLiveView()
     m_liveView->m_state = LiveView::WaitingToStop;
 
     return true;
-}
-
-EdsSize Camera::liveViewImageSize() const
-{
-    return m_liveView->m_imageSize;
 }
 
 bool Camera::autoFocus()

@@ -25,9 +25,6 @@ extern "C" {
     static PyObject * Camera_takeSinglePicture(CameraObject * self, PyObject * args);
     static PyObject * Camera_startLiveView(CameraObject * self, PyObject * args);
     static PyObject * Camera_stopLiveView(CameraObject * self, PyObject * args);
-    static PyObject * Camera_liveViewImageSize(CameraObject * self, PyObject * args);
-    static PyObject * Camera_zoomPosition(CameraObject * self, PyObject * args);
-    static PyObject * Camera_setZoomPosition(CameraObject * self, PyObject * args);
     static PyObject * Camera_zoomRatio(CameraObject * self, PyObject * args);
     static PyObject * Camera_setZoomRatio(CameraObject * self, PyObject * args);
     static PyObject * Camera_whiteBalance(CameraObject * self, PyObject * args);
@@ -43,6 +40,12 @@ extern "C" {
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
     static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
     static PyObject * Camera_autoFocus(CameraObject * self, PyObject * args);
+
+    static PyObject * Camera_liveViewImageSize(CameraObject * self, PyObject * args);
+    static PyObject * Camera_maxZoomPosition(CameraObject * self, PyObject * args);
+    static PyObject * Camera_zoomBoxSize(CameraObject * self, PyObject * args);
+    static PyObject * Camera_zoomPosition(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setZoomPosition(CameraObject * self, PyObject * args);
     static PyMethodDef CameraMethods[] = {
         {"connect",             (PyCFunction)Camera_connect,             METH_VARARGS, "establish a session on the camera"},
         {"disconnect",          (PyCFunction)Camera_disconnect,          METH_VARARGS, "release the session with the camera"},
@@ -51,11 +54,14 @@ extern "C" {
         {"takeSinglePicture",   (PyCFunction)Camera_takeSinglePicture,   METH_VARARGS, "takes one picture to file specified."},
         {"startLiveView",       (PyCFunction)Camera_startLiveView,       METH_VARARGS, "tells the camera to go into live view mode"},
         {"stopLiveView",        (PyCFunction)Camera_stopLiveView,        METH_VARARGS, "tells the camera to come out of live view mode"},
-        {"liveViewImageSize",   (PyCFunction)Camera_liveViewImageSize,   METH_VARARGS, "returns (width, height) of the live view image size."
-                                                                                       " only valid after live view has been on."},
         {"autoFocus",           (PyCFunction)Camera_autoFocus,           METH_VARARGS, "performs an auto focus once right now"},
+
+        {"liveViewImageSize",   (PyCFunction)Camera_liveViewImageSize,   METH_VARARGS, "returns (w, h) of the image data coming from live view."},
+        {"maxZoomPosition",     (PyCFunction)Camera_maxZoomPosition,     METH_VARARGS, "returns (x, y) of what you can set zoom position to."},
+        {"zoomBoxSize",         (PyCFunction)Camera_zoomBoxSize,         METH_VARARGS, "returns (w, h) of the zoom rectangle that represents zoom position."},
         {"zoomPosition",        (PyCFunction)Camera_zoomPosition,        METH_VARARGS, "returns (x, y) of the zoom position when zoomed in in live view."},
         {"setZoomPosition",     (PyCFunction)Camera_setZoomPosition,     METH_VARARGS, "sets the zoom position when zoomed in in live view."},
+
         {"zoomRatio",           (PyCFunction)Camera_zoomRatio,           METH_VARARGS, "returns the zoom factor."},
         {"setZoomRatio",        (PyCFunction)Camera_setZoomRatio,        METH_VARARGS, "sets the zoom factor"},
         {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS, "returns the white balance property. this is an enum defined in edsdk."},
@@ -191,7 +197,27 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        EdsSize size = self->camera->liveViewImageSize();
+        EdsSize size = self->camera->cameraSpecificData()->zoom100ImageSize;
+
+        return Py_BuildValue("ii", size.width, size.height);
+    }
+
+    static PyObject * Camera_maxZoomPosition(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        EdsPoint pt = self->camera->cameraSpecificData()->zoom100MaxPosition;
+
+        return Py_BuildValue("ii", pt.x, pt.y);
+    }
+
+    static PyObject * Camera_zoomBoxSize(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        EdsSize size = self->camera->cameraSpecificData()->zoomBoxSize;
 
         return Py_BuildValue("ii", size.width, size.height);
     }

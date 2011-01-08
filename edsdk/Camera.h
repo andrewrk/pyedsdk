@@ -61,6 +61,14 @@ class Camera
             ManualFocus = 3,
         };
 
+        struct CameraModelData {
+            EdsPoint zoom100MaxPosition;
+            EdsPoint zoom500MaxPosition;
+            EdsSize zoom100ImageSize;
+            EdsSize zoom500ImageSize;
+            EdsSize zoomBoxSize;
+        };
+
     public: // methods
         ~Camera();
 
@@ -74,8 +82,8 @@ class Camera
         // use if you want to start over
         static void terminate();
 
-        // name of the camera model
-        string name() const;
+        string name() const { return m_name; }
+        const CameraModelData * cameraSpecificData();
 
         // takes a picture with the camera and puts it in outFile.
         // returns immediately but the picture won't be finished immediately.
@@ -89,10 +97,6 @@ class Camera
         bool stopLiveView();
         // this function refreshes the frame buffer with a new image from the camera.
         bool grabLiveViewFrame();
-
-        // size of the frames coming through live view. only valid once
-        // live view has started.
-        EdsSize liveViewImageSize() const;
 
         // move the zoom point of live view around
         EdsPoint zoomPosition() const;
@@ -168,7 +172,6 @@ class Camera
             State m_desiredNewState; // what state to try to get to after we're done waiting
 
             EdsStreamRef m_streamPtr;
-            EdsSize m_imageSize;
 
             // the allocated space we have set aside for frame data
             unsigned char * m_frameBuffer;
@@ -181,14 +184,6 @@ class Camera
         static const string c_cameraName_5D;
         static const string c_cameraName_40D;
         static const string c_cameraName_7D;
-
-        struct CameraModelData {
-            EdsPoint zoom100MaxPosition;
-            EdsPoint zoom500MaxPosition;
-            EdsSize zoom100ImageSize;
-            EdsSize zoom500ImageSize;
-            EdsSize zoomBoxSize;
-        };
 
         static map<string, CameraModelData> s_modelData;
 
@@ -221,14 +216,15 @@ class Camera
 
         bool m_connected;
 
+        CameraModelData * m_cameraData;
+
+        string m_name;
+
     private: // methods
         static void initialize();
         static void initStaticData();
 
         Camera();
-
-        CameraModelData cameraSpecificData();
-
 
         static EdsError EDSCALLBACK staticObjectEventHandler(EdsObjectEvent inEvent, EdsBaseRef inRef, EdsVoid * inContext);
         static EdsError EDSCALLBACK staticStateEventHandler(EdsStateEvent inEvent, EdsUInt32 inEventData, EdsVoid * inContext);
@@ -252,6 +248,10 @@ class Camera
         bool _stopLiveView();
 
         void handleCameraIsReady();
+
+        // name of the camera model
+        string name() const;
+
 
     friend class LiveView;
 };

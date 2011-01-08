@@ -219,6 +219,12 @@ class Camera:
     def liveViewImageSize(self):
         return self._camera.liveViewImageSize()
 
+    def maxZoomPosition(self):
+        return self._camera.maxZoomPosition()
+
+    def zoomBoxSize(self):
+        return self._camera.zoomBoxSize()
+
     def zoomPosition(self):
         return self._camera.zoomPosition()
 
