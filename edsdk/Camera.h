@@ -83,7 +83,7 @@ class Camera
         static void terminate();
 
         string name() const { return m_name; }
-        const CameraModelData * cameraSpecificData();
+        const CameraModelData * cameraSpecificData() const;
 
         // takes a picture with the camera and puts it in outFile.
         // returns immediately but the picture won't be finished immediately.
@@ -250,7 +250,7 @@ class Camera
         void handleCameraIsReady();
 
         // name of the camera model
-        string name() const;
+        string getName() const;
 
 
     friend class LiveView;

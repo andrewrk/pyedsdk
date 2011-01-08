@@ -96,9 +96,6 @@ Camera::LiveView::LiveView() :
     m_state(Off),
     m_streamPtr(NULL)
 {
-    m_imageSize.width = 0;
-    m_imageSize.height = 0;
-    
     // set up buffer
     m_frameBuffer = new unsigned char[c_frameBufferSize];
     EdsError err = EdsCreateMemoryStreamFromPointer(m_frameBuffer, c_frameBufferSize, &m_streamPtr);
