@@ -24,7 +24,7 @@ camera = Extension(
 
 setup(
     name='edsdk',
-    version='0.4',
+    version='0.5',
     author="Andrew Kelley",
     author_email="superjoe30@gmail.com",
     url="http://github.com/superjoe30/pyedsdk",

@@ -1,10 +1,6 @@
 Python library to control Canon cameras via EDSDK in Windows.
 
-Sample usage:
-
-    import edsdk
-    cam = edsdk.getFirstCamera()
-    cam.takeSinglePicture(filename)
+For sample usage, see test.py
 
 To install the python module in windows:
 

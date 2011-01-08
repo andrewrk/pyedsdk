@@ -124,7 +124,7 @@ extern "C" {
         if (! PyArg_ParseTuple(args, ""))
             return NULL;
 
-        if (self->camera->connect())
+        if (self->camera->disconnect())
             Py_RETURN_TRUE;
         else
             Py_RETURN_FALSE;
@@ -333,10 +333,9 @@ extern "C" {
         self->camera = Camera::getFirstCamera();
 
         if (self->camera == NULL) {
-            // raise python error
+            fprintf(stderr, "returning none\n");
             Camera_dealloc(self);
-            PyErr_SetString(CameraError, "Unable to connect to camera.");
-            return NULL;
+            Py_RETURN_NONE;
         }
 
         return (PyObject *) self;
