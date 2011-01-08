@@ -13,6 +13,7 @@ To install the python module in windows:
         python setup.py build -c mingw32
         python setup.py install
     copy $(EDSDK_ROOT)/Dll/*.dll to the cwd where you execute from
+    Disable User Account Control. If you had it turned on, you'll need to reboot.
 
 To compile the test C++ program in windows:
 
