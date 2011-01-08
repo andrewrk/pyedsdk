@@ -32,6 +32,13 @@ extern "C" {
     static PyObject * Camera_setZoomRatio(CameraObject * self, PyObject * args);
     static PyObject * Camera_whiteBalance(CameraObject * self, PyObject * args);
     static PyObject * Camera_setWhiteBalance(CameraObject * self, PyObject * args);
+    static PyObject * Camera_meteringMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setMeteringMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_driveMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setDriveMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_afMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setAFMode(CameraObject * self, PyObject * args);
+
     static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args);
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
     static PyObject * Camera_grabLiveViewFrame(CameraObject * self, PyObject * args);
