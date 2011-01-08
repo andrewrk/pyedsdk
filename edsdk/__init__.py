@@ -61,6 +61,30 @@ class ErrorLevel:
     Error = 2
     NoMessages = 3
 
+class MeteringMode:
+    SpotMetering = 1
+    EvaluativeMetering = 3
+    PartialMetering = 4
+    CenterWeightedMetering = 5
+
+class DriveMode:
+    SingleFrameShooting = 0x00000000
+    ContinuousShooting = 0x00000001
+    Video = 0x00000002
+    HighSpeedContinuousShooting = 0x00000004
+    LowSpeedContinuousShooting = 0x00000005
+    SilentSingleShooting = 0x00000006
+    TenSecSelfTimerPlusShots = 0x00000007
+    TenSecSelfTimer = 0x00000010
+    TwoSecSelfTimer = 0x00000011
+
+class AFMode:
+    OneShotAF = 0
+    AIServoAF = 1
+    AIFocusAF = 2
+    ManualFocus = 3
+
+
 def setErrorMessageCallback(callback):
     """
     callback(level, message) will be called when there is an error message
@@ -211,10 +235,37 @@ class Camera:
         """
         callback(white_balance) will be called when the data is ready
         """
-        _runInComThread(self._camera.whiteBalance, callback)
+        _runInComThread(self._camera.whiteBalance, callback=callback)
 
     def setWhiteBalance(self, white_balance):
         self._camera.setWhiteBalance(white_balance)
+
+    def meteringMode(self, callback):
+        """
+        callback(metering_mode) will be called when the data is ready
+        """
+        _runInComThread(self._camera.meteringMode, callback=callback)
+
+    def setMeteringMode(self, mode):
+        _runInComThread(self._camera.setMeteringMode, args=[mode])
+    
+    def driveMode(self, callback):
+        """
+        callback(drive_mode) will be called when the data is ready
+        """
+        _runInComThread(self._camera.driveMode, callback=callback)
+
+    def setDriveMode(self, mode):
+        _runInComThread(self._camera.setDriveMode, args=[mode])
+
+    def afMode(self, callback):
+        """
+        callback(af_mode) will be called
+        """
+        _runInComThread(self._camera.afMode, callback=callback)
+
+    def setAFMode(self, mode):
+        _runInComThread(self._camera.setAFMode, args=[mode])
 
     def autoFocus(self):
         _runInComThread(self._camera.autoFocus)

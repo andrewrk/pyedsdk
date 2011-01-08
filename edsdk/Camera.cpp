@@ -1010,6 +1010,69 @@ void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
     m_pendingWhiteBalance = true;
 }
 
+MeteringMode Camera::meteringMode() const
+{
+    EdsUInt32 mode;
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_MeteringMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
+    if (err) {
+        *s_err << "Unable to get metering mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
+    return (MeteringMode) mode;
+}
+
+void Camera::setMeteringMode(MeteringMode mode)
+{
+    EdsUInt32 edsMode = mode;
+    err = EdsSetPropertyData(m_cam, kEdsPropID_MeteringMode, 0, sizeof(EdsUInt32), &edsMode);
+    if (err) {
+        *s_err << "Unable to set metering mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+}
+
+DriveMode Camera::driveMode() const
+{
+    EdsUInt32 mode;
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
+    if (err) {
+        *s_err << "Unable to get drive mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
+    return (DriveMode) mode;
+}
+
+void Camera::setDriveMode(DriveMode mode)
+{
+    EdsUInt32 edsMode = mode;
+    err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
+    if (err) {
+        *s_err << "Unable to set drive mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+}
+
+AFMode Camera::afMode() const
+{
+    EdsUInt32 mode;
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
+    if (err) {
+        *s_err << "Unable to get drive mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
+    return (DriveMode) mode;
+}
+
+void Camera::setAFMode(AFMode mode)
+{
+    EdsUInt32 edsMode = mode;
+    err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
+    if (err) {
+        *s_err << "Unable to set AF mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+}
+
 string Camera::name() const
 {
     EdsDeviceInfo deviceInfo;

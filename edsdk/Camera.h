@@ -35,6 +35,32 @@ class Camera
             string msg;
         };
 
+        enum MeteringMode {
+            SpotMetering = 1,
+            EvaluativeMetering = 3,
+            PartialMetering = 4,
+            CenterWeightedMetering = 5,
+        };
+
+        enum DriveMode {
+            SingleFrameShooting = 0x00000000,
+            ContinuousShooting = 0x00000001,
+            Video = 0x00000002,
+            HighSpeedContinuousShooting = 0x00000004,
+            LowSpeedContinuousShooting = 0x00000005,
+            SilentSingleShooting = 0x00000006,
+            TenSecSelfTimerPlusShots = 0x00000007,
+            TenSecSelfTimer = 0x00000010,
+            TwoSecSelfTimer = 0x00000011,
+        };
+
+        enum AFMode {
+            OneShotAF = 0,
+            AIServoAF = 1,
+            AIFocusAF = 2,
+            ManualFocus = 3,
+        };
+
     public: // methods
         ~Camera();
 
@@ -77,9 +103,17 @@ class Camera
         int zoomRatio() const;
         void setZoomRatio(int zoomRatio);
 
-        // white balance property
         EdsWhiteBalance whiteBalance() const;
         void setWhiteBalance(EdsWhiteBalance whiteBalance);
+
+        MeteringMode meteringMode() const;
+        void setMeteringMode(MeteringMode mode);
+
+        DriveMode driveMode() const;
+        void setDriveMode(DriveMode mode);
+
+        AFMode afMode() const;
+        void setAFMode(AFMode mode);
 
         // get the oldest message from the event queue and remove it.
         // the return value is the filename of the completed picture

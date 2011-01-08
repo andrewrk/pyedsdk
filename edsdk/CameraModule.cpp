@@ -51,8 +51,15 @@ extern "C" {
         {"setZoomPosition",     (PyCFunction)Camera_setZoomPosition,     METH_VARARGS, "sets the zoom position when zoomed in in live view."},
         {"zoomRatio",           (PyCFunction)Camera_zoomRatio,           METH_VARARGS, "returns the zoom factor."},
         {"setZoomRatio",        (PyCFunction)Camera_setZoomRatio,        METH_VARARGS, "sets the zoom factor"},
-        {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS, "returns the white balance setting. this is an enum defined in edsdk."},
-        {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS, "sets the while balance setting"},
+        {"whiteBalance",        (PyCFunction)Camera_whiteBalance,        METH_VARARGS, "returns the white balance property. this is an enum defined in edsdk."},
+        {"setWhiteBalance",     (PyCFunction)Camera_setWhiteBalance,     METH_VARARGS, "sets the white balance property"},
+        {"meteringMode",        (PyCFunction)Camera_meteringMode,        METH_VARARGS, "returns the metering mode property"},
+        {"setMeteringMode",     (PyCFunction)Camera_setMeteringMode,     METH_VARARGS, "sets the metering mode property"},
+        {"driveMode",           (PyCFunction)Camera_driveMode,           METH_VARARGS, "returns the drive mode property"},
+        {"setDriveMode",        (PyCFunction)Camera_setDriveMode,        METH_VARARGS, "sets the drive mode property"},
+        {"afMode",              (PyCFunction)Camera_afMode,              METH_VARARGS, "returns the AF mode property"},
+        {"setAFMode",           (PyCFunction)Camera_setAFMode,           METH_VARARGS, "sets the AF mode property"},
+
         {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
         {"grabLiveViewFrame",   (PyCFunction)Camera_grabLiveViewFrame,   METH_VARARGS, "refresh the frame buffer with a new frame from the camera."},
@@ -245,6 +252,69 @@ extern "C" {
             return NULL;
 
         self->camera->setWhiteBalance((EdsWhiteBalance)whiteBalance);
+
+        Py_RETURN_NONE;
+    }
+
+    static PyObject * Camera_meteringMode(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int mode = self->camera->meteringMode();
+
+        return Py_BuildValue("i", mode);
+    }
+
+    static PyObject * Camera_setMeteringMode(CameraObject * self, PyObject * args)
+    {
+        int mode;
+        if (! PyArg_ParseTuple(args, "i", &mode))
+            return NULL;
+
+        self->camera->setMeteringMode((Camera::MeteringMode)mode);
+
+        Py_RETURN_NONE;
+    }
+
+    static PyObject * Camera_driveMode(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int mode = self->camera->driveMode();
+
+        return Py_BuildValue("i", mode);
+    }
+
+    static PyObject * Camera_setDriveMode(CameraObject * self, PyObject * args)
+    {
+        int mode;
+        if (! PyArg_ParseTuple(args, "i", &mode))
+            return NULL;
+
+        self->camera->setDriveMode((Camera::DriveMode)mode);
+
+        Py_RETURN_NONE;
+    }
+
+    static PyObject * Camera_afMode(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        int mode = self->camera->afMode();
+
+        return Py_BuildValue("i", mode);
+    }
+
+    static PyObject * Camera_setAFMode(CameraObject * self, PyObject * args)
+    {
+        int mode;
+        if (! PyArg_ParseTuple(args, "i", &mode))
+            return NULL;
+
+        self->camera->setAFMode((Camera::AFMode)mode);
 
         Py_RETURN_NONE;
     }
