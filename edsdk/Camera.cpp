@@ -1010,7 +1010,7 @@ void Camera::setWhiteBalance(EdsWhiteBalance whiteBalance)
     m_pendingWhiteBalance = true;
 }
 
-MeteringMode Camera::meteringMode() const
+Camera::MeteringMode Camera::meteringMode() const
 {
     EdsUInt32 mode;
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_MeteringMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
@@ -1024,14 +1024,14 @@ MeteringMode Camera::meteringMode() const
 void Camera::setMeteringMode(MeteringMode mode)
 {
     EdsUInt32 edsMode = mode;
-    err = EdsSetPropertyData(m_cam, kEdsPropID_MeteringMode, 0, sizeof(EdsUInt32), &edsMode);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_MeteringMode, 0, sizeof(EdsUInt32), &edsMode);
     if (err) {
         *s_err << "Unable to set metering mode: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
 }
 
-DriveMode Camera::driveMode() const
+Camera::DriveMode Camera::driveMode() const
 {
     EdsUInt32 mode;
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
@@ -1045,14 +1045,14 @@ DriveMode Camera::driveMode() const
 void Camera::setDriveMode(DriveMode mode)
 {
     EdsUInt32 edsMode = mode;
-    err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
     if (err) {
         *s_err << "Unable to set drive mode: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
 }
 
-AFMode Camera::afMode() const
+Camera::AFMode Camera::afMode() const
 {
     EdsUInt32 mode;
     EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
@@ -1066,7 +1066,7 @@ AFMode Camera::afMode() const
 void Camera::setAFMode(AFMode mode)
 {
     EdsUInt32 edsMode = mode;
-    err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
     if (err) {
         *s_err << "Unable to set AF mode: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
