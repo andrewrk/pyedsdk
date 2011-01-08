@@ -333,7 +333,6 @@ extern "C" {
         self->camera = Camera::getFirstCamera();
 
         if (self->camera == NULL) {
-            fprintf(stderr, "returning none\n");
             Camera_dealloc(self);
             Py_RETURN_NONE;
         }
