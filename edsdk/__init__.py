@@ -84,13 +84,12 @@ def terminate():
         return
 
     def f():
+        _callbacksThread.join()
         CppCamera.terminate()
         global _running
         _running = False
-        _callbackQueue.put((lambda x: x, None))
+    _callbackQueue.put((lambda x: x, None))
     _runInComThread(f)
-    _callbacksThread.join()
-    _comThread.join()
 
 def initialize():
     global _running
