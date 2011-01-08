@@ -3,12 +3,17 @@ import threading, time
 import pythoncom
 import queue
 
-__version__ = '0.5'
+__version__ = '0.6'
 
 _errorMessageCallback = None
 _methodQueue = queue.Queue()
 _running = False
 _comThread = None
+_callbacksThread = None
+_callbackQueue = queue.Queue()
+
+def _make_thread(target, name, args=[]):
+    return threading.Thread(target=target, name=name, args=args)
 
 def _run_com_thread():
     pythoncom.CoInitializeEx(2)
@@ -20,11 +25,16 @@ def _run_com_thread():
                 result = func(*args)
                 _flushErrors()
                 if callback is not None:
-                    callback(result)
+                    _callbackQueue.put((callback, result))
         except queue.Empty:
             pass
         pythoncom.PumpWaitingMessages()
         time.sleep(0.05)
+
+def _run_callbacks_thread():
+    while _running:
+        func, args = _callbackQueue.get(block=True)
+        func(args)
 
 def _runInComThread(func, args=None, callback=None):
     if args is None:
@@ -77,7 +87,10 @@ def terminate():
         CppCamera.terminate()
         global _running
         _running = False
+        _callbackQueue.put((lambda x: x, None))
     _runInComThread(f)
+    _callbacksThread.join()
+    _comThread.join()
 
 def initialize():
     global _running
@@ -88,17 +101,25 @@ def initialize():
     _running = True
 
     global _comThread
-    _comThread = threading.Thread(target=_run_com_thread, name="edsdk._run_com_thread")
+    _comThread = _make_thread(_run_com_thread, "edsdk._run_com_thread")
     _comThread.start()
 
+    global _callbacksThread
+    _callbacksThread = _make_thread(_run_callbacks_thread, "edsdk._run_callbacks_thread")
+    _callbacksThread.start()
+
 class Camera:
+    """
+    class which represents a Canon camera. don't forget to call disconnect
+    when you're done or a thread will keep runnning.
+    """
     def _checkPictureQueue(self):
         while self._running:
             while self._camera.pictureDoneQueueSize() > 0:
                 pic = self._camera.popPictureDoneQueue()
                 _flushErrors()
                 if self._pictureCompleteCallback:
-                    self._pictureCompleteCallback(pic)
+                    _callbackQueue.put((self._pictureCompleteCallback, pic))
             time.sleep(0.10)
 
     def __init__(self, cpp_camera):
@@ -115,7 +136,7 @@ class Camera:
         self._running = True
 
         # thread to watch for completed pictures
-        self._pictureThread = threading.Thread(target=Camera._checkPictureQueue, name="edsdk._checkPictureQueue", args=(self,))
+        self._pictureThread = _make_thread(Camera._checkPictureQueue, "edsdk._checkPictureQueue", args=(self,))
         self._pictureThread.start()
 
         _runInComThread(self._camera.connect)
@@ -127,6 +148,7 @@ class Camera:
         self._running = False
 
         _runInComThread(self._camera.disconnect)
+        self._pictureThread.join()
 
     def name(self, callback):
         """
