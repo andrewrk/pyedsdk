@@ -1127,7 +1127,6 @@ void Camera::setExposureCompensation(float value)
     if (err) {
         *s_err << "Unable to turn live view auto focus off: " << ErrorMap::errorMsg(err);
         pushErrMsg();
-        return false;
     }
 
     EdsUInt32 enumValue = Utils::closest(s_exposureCompensationValues, value);
