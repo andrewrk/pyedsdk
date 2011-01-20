@@ -151,8 +151,6 @@ Camera::Camera() :
     m_pendingZoomRatio(false),
     m_whiteBalance(kEdsWhiteBalance_Auto),
     m_pendingWhiteBalance(false),
-    m_exposureCompensation(0),
-    m_pendingExposureCompensation(false),
     m_pictureCompleteCallback(NULL),
     m_connected(false),
     m_cameraData(NULL)
@@ -1124,8 +1122,12 @@ float Camera::exposureCompensation() const
 
 void Camera::setExposureCompensation(float value)
 {
-    m_exposureCompensation = Utils::closest(s_exposureCompensationValues, value);
-    m_pendingExposureCompensation = true;
+    EdsUInt32 enumValue = Utils::closest(s_exposureCompensationValues, value);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &enumValue);
+    if (err) {
+        *s_err << "Unable to set exposure compensation: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
 }
 
 string Camera::getName() const
@@ -1259,17 +1261,6 @@ bool Camera::grabLiveViewFrame()
             pushErrMsg(Warning);
         } else {
             m_pendingWhiteBalance = false;
-        }
-    }
-
-    // set exposure compensation
-    if (m_pendingExposureCompensation) {
-        err = EdsSetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &m_exposureCompensation);
-        if (err) {
-            *s_err << "Unable to set exposure compensation: " << ErrorMap::errorMsg(err);
-            pushErrMsg(Warning);
-        } else {
-            m_pendingExposureCompensation = false;
         }
     }
 
@@ -1419,14 +1410,14 @@ bool Camera::autoFocus()
 
     err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
     if (err) {
-        *s_err << "Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
+        *s_err << "ERROR: Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
 
     err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
     if (err) {
-        *s_err << "Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
+        *s_err << "ERROR: Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
