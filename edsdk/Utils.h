@@ -19,8 +19,8 @@ namespace Utils
         if (_map.size() == 1)
             return _map.begin()->second;
 
-        typename map<K, V>::iterator it = _map.lower_bound(key);
-        typename map<K, V>::iterator prev = it; prev--;
+        typename map<K, V>::const_iterator it = _map.lower_bound(key);
+        typename map<K, V>::const_iterator prev = it; prev--;
         if (it == _map.end() || (abs(prev->first - key) < abs(it->first - key)))
             return prev->second;
         else
@@ -28,8 +28,8 @@ namespace Utils
     }
 
     template<class K, class V>
-    V value(map<K, V> & _map, const K & key, const V & default_value) {
-        map<K, V>::iterator it = _map.find(key);
+    V value(const map<K, V> & _map, const K & key, const V & default_value) {
+        typename map<K, V>::const_iterator it = _map.find(key);
         if (it == _map.end())
             return default_value;
         

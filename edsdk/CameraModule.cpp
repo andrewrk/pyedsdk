@@ -74,8 +74,8 @@ extern "C" {
         {"setDriveMode",        (PyCFunction)Camera_setDriveMode,        METH_VARARGS, "sets the drive mode property"},
         {"afMode",              (PyCFunction)Camera_afMode,              METH_VARARGS, "returns the AF mode property"},
         {"setAFMode",           (PyCFunction)Camera_setAFMode,           METH_VARARGS, "sets the AF mode property"},
-        {"exposureCompensation",(PyCFunction)Camera_afMode,              METH_VARARGS, "returns the exposure compensation property"},
-        {"setExposureCompensation",(PyCFunction)Camera_setAFMode,        METH_VARARGS, "sets the exposure compensation property"},
+        {"exposureCompensation",(PyCFunction)Camera_exposureCompensation,METH_VARARGS, "returns the exposure compensation property"},
+        {"setExposureCompensation",(PyCFunction)Camera_setExposureCompensation,METH_VARARGS, "sets the exposure compensation property"},
 
         {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
