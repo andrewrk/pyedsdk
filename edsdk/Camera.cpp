@@ -1122,12 +1122,21 @@ float Camera::exposureCompensation() const
 
 void Camera::setExposureCompensation(float value)
 {
+    EdsError err;
+    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)kEdsCameraCommand_EvfAf_OFF);
+    if (err) {
+        *s_err << "Unable to turn live view auto focus off: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+        return false;
+    }
+
     EdsUInt32 enumValue = Utils::closest(s_exposureCompensationValues, value);
-    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &enumValue);
+    err = EdsSetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &enumValue);
     if (err) {
         *s_err << "Unable to set exposure compensation: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
+
 }
 
 string Camera::getName() const
@@ -1408,16 +1417,16 @@ bool Camera::autoFocus()
         }
     }
 
-    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Quick);
+    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)kEdsCameraCommand_EvfAf_OFF);
     if (err) {
-        *s_err << "ERROR: Unable to set camera to AF mode quick: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to turn live view auto focus off: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
 
-    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)Evf_AFMode_Live);
+    err = EdsSendCommand(m_cam, (EdsUInt32)kEdsCameraCommand_DoEvfAf, (EdsUInt32)kEdsCameraCommand_EvfAf_ON);
     if (err) {
-        *s_err << "ERROR: Unable to set camera to AF mode live: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to turn live view auto focus on: " << ErrorMap::errorMsg(err);
         pushErrMsg();
         return false;
     }
