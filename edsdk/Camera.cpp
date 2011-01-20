@@ -1090,9 +1090,9 @@ void Camera::setDriveMode(DriveMode mode)
 Camera::AFMode Camera::afMode() const
 {
     EdsUInt32 mode;
-    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_AFMode, 0, sizeof(EdsUInt32), (EdsVoid *) &mode);
     if (err) {
-        *s_err << "Unable to get drive mode: " << ErrorMap::errorMsg(err);
+        *s_err << "Unable to get AF mode: " << ErrorMap::errorMsg(err);
         pushErrMsg();
     }
     return (AFMode) mode;
@@ -1101,7 +1101,7 @@ Camera::AFMode Camera::afMode() const
 void Camera::setAFMode(AFMode mode)
 {
     EdsUInt32 edsMode = mode;
-    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_AFMode, 0, sizeof(EdsUInt32), &edsMode);
     if (err) {
         *s_err << "Unable to set AF mode: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
