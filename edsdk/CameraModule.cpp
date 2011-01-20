@@ -35,6 +35,8 @@ extern "C" {
     static PyObject * Camera_setDriveMode(CameraObject * self, PyObject * args);
     static PyObject * Camera_afMode(CameraObject * self, PyObject * args);
     static PyObject * Camera_setAFMode(CameraObject * self, PyObject * args);
+    static PyObject * Camera_exposureCompensation(CameraObject * self, PyObject * args);
+    static PyObject * Camera_setExposureCompensation(CameraObject * self, PyObject * args);
 
     static PyObject * Camera_popPictureDoneQueue(CameraObject * self, PyObject * args);
     static PyObject * Camera_pictureDoneQueueSize(CameraObject * self, PyObject * args);
@@ -72,6 +74,8 @@ extern "C" {
         {"setDriveMode",        (PyCFunction)Camera_setDriveMode,        METH_VARARGS, "sets the drive mode property"},
         {"afMode",              (PyCFunction)Camera_afMode,              METH_VARARGS, "returns the AF mode property"},
         {"setAFMode",           (PyCFunction)Camera_setAFMode,           METH_VARARGS, "sets the AF mode property"},
+        {"exposureCompensation",(PyCFunction)Camera_afMode,              METH_VARARGS, "returns the exposure compensation property"},
+        {"setExposureCompensation",(PyCFunction)Camera_setAFMode,        METH_VARARGS, "sets the exposure compensation property"},
 
         {"popPictureDoneQueue", (PyCFunction)Camera_popPictureDoneQueue, METH_VARARGS, "pops the oldest picture that is completed."},
         {"pictureDoneQueueSize",(PyCFunction)Camera_pictureDoneQueueSize,METH_VARARGS, "checks how many pictures are in the completed queue."},
@@ -348,6 +352,27 @@ extern "C" {
             return NULL;
 
         self->camera->setAFMode((Camera::AFMode)mode);
+
+        Py_RETURN_NONE;
+    }
+
+    static PyObject * Camera_exposureCompensation(CameraObject * self, PyObject * args)
+    {
+        if (! PyArg_ParseTuple(args, ""))
+            return NULL;
+
+        float value = self->camera->exposureCompensation();
+
+        return Py_BuildValue("f", value);
+    }
+
+    static PyObject * Camera_setExposureCompensation(CameraObject * self, PyObject * args)
+    {
+        float value;
+        if (! PyArg_ParseTuple(args, "f", &value))
+            return NULL;
+
+        self->camera->setExposureCompensation(value);
 
         Py_RETURN_NONE;
     }

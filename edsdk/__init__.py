@@ -273,6 +273,12 @@ class Camera:
     def setAFMode(self, mode):
         _runInComThread(self._camera.setAFMode, args=[mode])
 
+    def exposureCompensation(self, callback):
+        _runInComThread(self._camera.exposureCompensation, callback=callback)
+
+    def setExposureCompensation(self, value):
+        _runInComThread(self._camera.setExposureCompensation, args=[value])
+
     def autoFocus(self):
         _runInComThread(self._camera.autoFocus)
 

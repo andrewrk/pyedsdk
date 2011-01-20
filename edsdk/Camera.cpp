@@ -3,6 +3,7 @@
 
 #include "ErrorMap.h"
 
+#include "Utils.h"
 #include "Filesystem.h"
 using namespace Filesystem;
 
@@ -24,6 +25,8 @@ bool Camera::s_initialized = false;
 bool Camera::s_staticDataInitialized = false;
 
 map<string, Camera::CameraModelData> Camera::s_modelData;
+map<float, EdsUInt32> Camera::s_exposureCompensationValues;
+map<EdsUInt32, float> Camera::s_exposureCompensationEnumToFloat;
 
 stringstream * Camera::s_err = NULL;
 queue<Camera::ErrorMessage> Camera::s_errMsgQueue;
@@ -90,6 +93,35 @@ void Camera::initStaticData()
     s_modelData[c_cameraName_40D] = data40D;
     s_modelData[c_cameraName_5D] = data5D;
     s_modelData[c_cameraName_7D] = data7D;
+
+    s_exposureCompensationValues[3.0f] =              0x18;
+    s_exposureCompensationValues[2.0f+2.0f/3.0f] =    0x15;
+    s_exposureCompensationValues[2.0f+1.0f/2.0f] =    0x14;
+    s_exposureCompensationValues[2.0f+1.0f/3.0f] =    0x13;
+    s_exposureCompensationValues[2.0f] =              0x10;
+    s_exposureCompensationValues[1.0f+2.0f/3.0f] =    0x0D;
+    s_exposureCompensationValues[1.0f+1.0f/2.0f] =    0x0C;
+    s_exposureCompensationValues[1.0f+1.0f/3.0f] =    0x0B;
+    s_exposureCompensationValues[1.0f] =              0x08;
+    s_exposureCompensationValues[2.0f/3.0f] =         0x05;
+    s_exposureCompensationValues[1.0f/2.0f] =         0x04;
+    s_exposureCompensationValues[1.0f/3.0f] =         0x03;
+    s_exposureCompensationValues[0.0f] =              0x00;
+    s_exposureCompensationValues[-1.0f/3.0f] =        0xFD;
+    s_exposureCompensationValues[-1.0f/2.0f] =        0xFC;
+    s_exposureCompensationValues[-2.0f/3.0f] =        0xFB;
+    s_exposureCompensationValues[-1.0f] =             0xF8;
+    s_exposureCompensationValues[-1.0f-1.0f/3.0f] =   0xF5;
+    s_exposureCompensationValues[-1.0f-1.0f/2.0f] =   0xF4;
+    s_exposureCompensationValues[-1.0f-2.0f/3.0f] =   0xF3;
+    s_exposureCompensationValues[-2.0f] =             0xF0;
+    s_exposureCompensationValues[-2.0f-1.0f/3.0f] =   0xED;
+    s_exposureCompensationValues[-2.0f-1.0f/2.0f] =   0xEC;
+    s_exposureCompensationValues[-2.0f-2.0f/3.0f] =   0xEB;
+    s_exposureCompensationValues[-3.0f] =             0xE8;
+
+    for (map<float, EdsUInt32>::iterator it = s_exposureCompensationValues.begin(); it != s_exposureCompensationValues.end(); it++)
+        s_exposureCompensationEnumToFloat[it->second] = it->first;
 }
 
 Camera::LiveView::LiveView() :
@@ -1072,6 +1104,28 @@ void Camera::setAFMode(AFMode mode)
     EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_DriveMode, 0, sizeof(EdsUInt32), &edsMode);
     if (err) {
         *s_err << "Unable to set AF mode: " << ErrorMap::errorMsg(err);
+        pushErrMsg(Warning);
+    }
+}
+
+float Camera::exposureCompensation() const
+{
+    EdsUInt32 value;
+    EdsError err = EdsGetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &value);
+    if (err) {
+        *s_err << "Unable to get exposure compensation: " << ErrorMap::errorMsg(err);
+        pushErrMsg();
+    }
+
+    return Utils::value(s_exposureCompensationEnumToFloat, value, 0.0f);
+}
+
+void Camera::setExposureCompensation(float value)
+{
+    EdsUInt32 enumValue = Utils::closest(s_exposureCompensationValues, value);
+    EdsError err = EdsSetPropertyData(m_cam, kEdsPropID_ExposureCompensation, 0, sizeof(EdsUInt32), &enumValue);
+    if (err) {
+        *s_err << "Unable to set exposure compensation: " << ErrorMap::errorMsg(err);
         pushErrMsg(Warning);
     }
 }

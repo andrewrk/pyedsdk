@@ -119,6 +119,10 @@ class Camera
         AFMode afMode() const;
         void setAFMode(AFMode mode);
 
+        // valid values are in the range [-3, 3] using only the fractions 0, 1/3, 1/2, and 2/3.
+        float exposureCompensation() const;
+        void setExposureCompensation(float value);
+
         // get the oldest message from the event queue and remove it.
         // the return value is the filename of the completed picture
         string popPictureDoneQueue();
@@ -186,6 +190,8 @@ class Camera
         static const string c_cameraName_7D;
 
         static map<string, CameraModelData> s_modelData;
+        static map<float, EdsUInt32> s_exposureCompensationValues;
+        static map<EdsUInt32, float> s_exposureCompensationEnumToFloat;
 
         struct TransferItem {
             EdsBaseRef sdkRef;
