@@ -29,7 +29,7 @@ namespace Utils
 
     template<class K, class V>
     V value(map<K, V> & _map, const K & key, const V & default_value) {
-        map<K, V>::const_iterator it = _map.find(key);
+        map<K, V>::iterator it = _map.find(key);
         if (it == _map.end())
             return default_value;
         
