@@ -210,6 +210,8 @@ class Camera
         bool m_pendingZoomRatio;
         EdsWhiteBalance m_whiteBalance;
         bool m_pendingWhiteBalance;
+        EdsUInt32 m_exposureCompensation;
+        bool m_pendingExposureCompensation;
 
         // how many milliseconds to wait before giving up
         static const int c_sleepTimeout;
